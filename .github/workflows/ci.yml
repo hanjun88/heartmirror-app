@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    env:
+      # 测试环境变量：P1-C 要求 JWT_SECRET 必须设置且 >=32 字符
+      JWT_SECRET: ci-test-jwt-secret-key-at-least-32-chars-long-xxxx
+      DATABASE_URL: sqlite:///./heartmirror_ci.db
+      WEB_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      # 引擎路径在 CI 上不存在，arbitrate 会走 SAFE_DEGRADED 降级路径（符合 fail-closed 设计）
+      XINJING_ENGINE_PATH: /nonexistent-engine-path
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run pytest
+        run: |
+          python -m pytest tests/ -v --junitxml=pytest-results.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: pytest-results.xml
+          retention-days: 14
