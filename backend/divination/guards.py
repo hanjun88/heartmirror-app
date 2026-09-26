@@ -85,8 +85,31 @@ def assert_no_divination_provenance(safety_input: Any) -> None:
 
 
 def assert_safe_boundary(safety_input: Any) -> None:
-    """安全边界总闸：进入 Meta-Arbiter 前调用。"""
+    """安全边界总闸：进入 Meta-Arbiter 前调用（**会抛异常**）。
+
+    仅适用于**非安全路径**（启动期校验、测试、离线工具）。
+    安全运行路径请用 :func:`check_safe_boundary` —— 它永不抛异常，
+    避免"守卫命中"被误用成"安全流程失败"。
+    """
     assert_no_symbolic_fields(safety_input)
     assert_no_divination_provenance(safety_input)
     if isinstance(safety_input, SafetyInput):
         assert_no_symbolic_fields(safety_input.to_engine_kwargs())
+
+
+def check_safe_boundary(safety_input: Any) -> tuple[bool, list[str]]:
+    """安全边界总闸·非抛出版（安全运行路径专用）。
+
+    返回 ``(是否通过, 违规详情列表)``，**绝不向调用方抛异常**。
+
+    这是 ADR-DIV-001/002 在 API 形状上的落点：调用方**不可能**误用
+    ``assert_*`` 系列去中断安全流程，因为这里不提供会抛异常的入口。
+    命中污染时，调用方应剥离象征数据、保留原始 SafetyInput 并**继续**安全裁决。
+    """
+    try:
+        assert_safe_boundary(safety_input)
+        return True, []
+    except SymbolicLockViolation as e:
+        return False, [str(e)]
+    except Exception as e:  # 守卫自身异常也不得外溢进安全路径
+        return False, [f"guard internal error: {type(e).__name__}: {e}"]

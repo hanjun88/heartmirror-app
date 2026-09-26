@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import ChatMessage, User
 from ..schemas import ChatRequest, ChatResponse, ChatHistoryOut, MemoryOut
+from ..divination import SafetyInput, check_safe_boundary
 from ..engine_client import arbitrate
 from ..llm_client import chat_completion, SOUL_PERSONAS
 from ..services.memory_service import recall_memories, extract_and_store, build_memory_context
@@ -45,7 +46,21 @@ def _persist_assistant_reply(db: Session, user_id: int, content: str, crisis: bo
 def chat(body: ChatRequest, db: Session = Depends(get_db),
          user: User = Depends(get_current_user)):
     # 1. 危机扫描（硬约束，不走 LLM）
-    arb_result = arbitrate(body.message, user_id=str(user.id))
+    #
+    # P3 接线：先以显式 SafetyInput 建模对话内容，再过 Symbolic Lock 运行时守卫。
+    # 关键不变量（ADR-DIV-001）：**守卫命中 ≠ 安全流程失败**——
+    # 检测到象征污染时剥离污染数据、保留原始用户文本，然后**继续**安全裁决。
+    safety_input = SafetyInput(user_message=body.message)
+    boundary_ok, boundary_violations = check_safe_boundary(safety_input)
+    if not boundary_ok:
+        # 剥离污染 + 审计留痕；绝不 raise 进安全路径
+        logger.warning(
+            "[SYMBOLIC_LOCK_VIOLATION] 剥离象征污染后继续安全流程: user=%s violations=%s",
+            user.id, boundary_violations,
+        )
+        safety_input = SafetyInput(user_message=body.message)  # 纯净重建
+
+    arb_result = arbitrate(safety_input.user_message, user_id=str(user.id))
 
     # 第二层 fail-closed 门：即使 arbitrate 返回异常格式或缺失字段，
     # 也默认走安全降级，而不是冒险进入普通 LLM 自由对话。

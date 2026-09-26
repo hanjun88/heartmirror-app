@@ -17,6 +17,7 @@ from .guards import (
     assert_no_divination_provenance,
     assert_no_symbolic_fields,
     assert_safe_boundary,
+    check_safe_boundary,
 )
 from .types import (
     FORBIDDEN_SAFETY_FIELDS,
@@ -43,4 +44,5 @@ __all__ = [
     "assert_no_symbolic_fields",
     "assert_no_divination_provenance",
     "assert_safe_boundary",
+    "check_safe_boundary",
 ]
