@@ -130,6 +130,42 @@ def test_enrichment_only_non_crisis(client, monkeypatch):
     mock_enrichment.enrich.assert_not_called()
 
 
+def test_enrichment_skipped_for_safety_plan(client, monkeypatch):
+    """SAFETY_PLAN 级别（is_crisis=False，但 target_level=SAFETY_PLAN）时 enrichment 不被调用。
+
+    这是 G1 变异守护：chat.py line 126 的条件
+        if target_level not in ("CRISIS", "SAFETY_PLAN"):
+    中 "SAFETY_PLAN" 排除分支必须有测试保护。is_crisis=False 意味着不走危机 early return，
+    请求会到达 line 126 的条件判断；若 SAFETY_PLAN 被误删，enrich 会被调用，本测试失败。
+    """
+    from backend.routers import chat as chat_mod
+
+    # arbitrate 返回：非危机、但 target_level=SAFETY_PLAN
+    safety_plan_arb = {
+        "is_crisis": False,
+        "matched_terms": [],
+        "target_level": "SAFETY_PLAN",
+        "intervention": "safety plan guidance",
+        "hotline": None,
+    }
+    monkeypatch.setattr(chat_mod, "arbitrate", lambda text, user_id="anonymous": dict(safety_plan_arb))
+    monkeypatch.setattr(chat_mod, "recall_memories", lambda db, uid, text, top_k=5: [])
+    monkeypatch.setattr(chat_mod, "build_memory_context", lambda recalled: "")
+    monkeypatch.setattr(chat_mod, "extract_and_store", lambda db, uid, msg, reply: [])
+    monkeypatch.setattr(chat_mod, "chat_completion", lambda messages, persona="warm": "safety plan reply")
+
+    mock_enrichment = MagicMock()
+    monkeypatch.setattr(chat_mod, "_divination_enrichment", mock_enrichment)
+
+    h = _reg(client, "p4_safetyplan@example.com")
+    r = client.post("/chat", headers=h, json={"message": "我需要一个安全计划来应对危机"})
+    assert r.status_code == 200
+    assert r.json()["is_crisis"] is False
+
+    # 关键断言：SAFETY_PLAN 级别必须跳过 enrichment
+    mock_enrichment.enrich.assert_not_called()
+
+
 def test_enrichment_added_to_prompt(client, monkeypatch):
     """非危机输入时，mock enrichment 返回 usable result，LLM 收到的 system content 包含侧注文本。"""
     from backend.routers import chat as chat_mod
@@ -185,7 +221,12 @@ def test_enrichment_failure_does_not_block(client, monkeypatch):
 
 
 def test_enrichment_not_usable_skipped(client, monkeypatch):
-    """enrichment 返回 degraded result（is_usable=False）时，prompt 中不包含侧注。"""
+    """enrichment 返回 degraded result（is_usable=False）时，prompt 中不包含侧注。
+
+    说明（G3）：此处依赖 render_annotation() 内部行为——degraded 时返回空字符串——
+    同时 chat.py 的显式 `if div_result.is_usable:` 检查为纵深防御。两层都挡住侧注渲染，
+    本测试验证最终结果（prompt 无侧注），不区分是哪一层挡住的。
+    """
     from backend.routers import chat as chat_mod
 
     captured_messages = []
@@ -211,8 +252,13 @@ def test_enrichment_not_usable_skipped(client, monkeypatch):
     assert "卦象提示" not in system_content
 
 
-def test_enrichment_not_in_arb_result(client, monkeypatch):
-    """enrichment 结果不出现在 arbitrate 的输入参数中。"""
+def test_enrichment_does_not_leak_into_arbitrate_input(client, monkeypatch):
+    """enrichment 数据绝不泄漏进 arbitrate 的输入参数。
+
+    测试范围（G5）：验证 arbitrate 被调用时的入参（text / user_id）是纯用户文本，
+    不含任何 divination/symbolic 数据。这不是对 arb_result 返回值的断言，而是对
+    "enrichment 只能在 arbitrate 之后运行、且其结果不回传安全通道" 的结构性守护。
+    """
     from backend.routers import chat as chat_mod
 
     arb_calls = []
