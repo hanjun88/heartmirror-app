@@ -37,10 +37,16 @@ jobs:
         run: |
           python -m pytest tests/ -v --junitxml=pytest-results.xml
 
+      - name: Run engine-available path tests (mock engine)
+        run: |
+          python -m pytest -m engine_available -v --junitxml=pytest-engine-available.xml
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pytest-results
-          path: pytest-results.xml
+          path: |
+            pytest-results.xml
+            pytest-engine-available.xml
           retention-days: 14
