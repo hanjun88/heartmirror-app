@@ -162,6 +162,35 @@ def arbitrate(text: str, user_id: str = "anonymous") -> Dict[str, Any]:
         return _safe_degraded_result("engine_unavailable")
 
 
+def arbitrate_safety(safety_input, user_id: str = "anonymous") -> Dict[str, Any]:
+    """安全评估的**显式 SafetyInput 入口**（P3 接线点）。
+
+    与 :func:`arbitrate` 的区别：后者接受裸 ``text``，调用方可能夹带任意数据；
+    本函数只接受 :class:`SafetyInput`，并在组装发往引擎的载荷前强制通过
+    Symbolic Lock 边界检查。
+
+    ADR-DIV-001 不变量：**守卫命中 ≠ 安全流程失败**。
+    检测到象征污染时——剥离污染、以原始用户文本重建纯净 SafetyInput、
+    记录审计日志，然后**继续**正常安全裁决。绝不抛异常中断危机判定链路。
+
+    ``arbitrate()`` 保持原签名不变（向后兼容既有调用方与测试）。
+    """
+    from .divination import SafetyInput, check_safe_boundary
+
+    passed, violations = check_safe_boundary(safety_input)
+    if not passed:
+        logger.warning(
+            "[SYMBOLIC_LOCK_VIOLATION] 剥离象征数据后继续安全评估: user=%s violations=%s",
+            user_id, violations,
+        )
+        # 剥离：以原始用户文本重建纯净输入（不中断安全流程）
+        safety_input = SafetyInput(
+            user_message=getattr(safety_input, "user_message", "") or ""
+        )
+
+    return arbitrate(safety_input.user_message, user_id=user_id)
+
+
 def natal(dt_utc: str, lat: float, lon: float) -> Dict[str, Any]:
     """西方本命盘（象征层，低置信标注）。"""
     if not _engine_available or not _compute_natal_fn:
