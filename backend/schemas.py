@@ -78,9 +78,10 @@ class DiaryTrends(BaseModel):
     emotion_distribution: Dict[str, int]
 
 
-# ---- Memory ----
+# ---- Memory（四层：soul/user/memory/agent） ----
 class MemoryCreate(BaseModel):
     content: str
+    layer: str = "memory"  # soul/user/memory/agent
     emotion: Optional[str] = None
     importance: int = Field(default=3, ge=1, le=5)
     entities: List[str] = Field(default_factory=list)
@@ -88,6 +89,7 @@ class MemoryCreate(BaseModel):
 
 class MemoryUpdate(BaseModel):
     content: Optional[str] = None
+    layer: Optional[str] = None
     emotion: Optional[str] = None
     importance: Optional[int] = Field(default=None, ge=1, le=5)
     is_pinned: Optional[bool] = None
@@ -95,6 +97,7 @@ class MemoryUpdate(BaseModel):
 
 class MemoryOut(BaseModel):
     id: int
+    layer: str
     content: str
     emotion: Optional[str] = None
     importance: int
@@ -185,6 +188,27 @@ class CoupleSessionOut(BaseModel):
 
 class CoupleMessageCreate(BaseModel):
     content: str
+
+
+class CouplePrivateReflectionCreate(BaseModel):
+    feelings: str = Field(..., description="用户私下对 AI 倾诉的内容")
+
+
+class CouplePrivateReflectionOut(BaseModel):
+    id: int
+    feelings: str
+    suggested_lines: List[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class GottmanGuideOut(BaseModel):
+    session_id: int
+    stage: str            # 开场 / 表达 / 倾听 / 共识
+    steps: List[str]
+    prompt: str
 
 
 # ---- Assessment ----

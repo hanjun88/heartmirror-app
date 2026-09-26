@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """SQLAlchemy 数据模型。"""
+import enum
 from datetime import datetime, date
 from sqlalchemy import (
     Column, Integer, String, Float, DateTime, Date, ForeignKey,
@@ -8,6 +9,17 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from .database import Base
+
+
+# ---- 四层记忆分层枚举 ----
+class MemoryLayer(str, enum.Enum):
+    SOUL = "soul"      # 灵魂层：核心价值观 / AI 人格
+    USER = "user"      # 用户画像层：依恋类型/爱语/冲突风格
+    MEMORY = "memory"  # 事件记忆层：具体发生过的事
+    AGENT = "agent"    # Agent 行为偏好层：用户对陪伴方式的偏好反馈
+
+
+MEMORY_LAYERS = tuple(l.value for l in MemoryLayer)
 
 
 class User(Base):
@@ -57,19 +69,21 @@ class Diary(Base):
 
 
 class Memory(Base):
-    """Memory 层：从对话/日记中提取的结构化记忆。"""
+    """四层记忆系统：Soul(灵魂) / User(画像) / Memory(事件) / Agent(行为偏好)。"""
     __tablename__ = "memories"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    layer = Column(String(20), default="memory", nullable=False, index=True)  # soul/user/memory/agent
     content = Column(Text, nullable=False)
     emotion = Column(String(50), nullable=True)
     importance = Column(Integer, default=3)  # 1-5
     entities = Column(JSON, default=list)  # 相关人物/事物
     memory_date = Column(Date, default=date.today)
-    is_pinned = Column(Boolean, default=False)
+    is_pinned = Column(Boolean, default=False)  # 置顶
     source = Column(String(30), default="chat")  # chat/diary/manual
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", back_populates="memories")
 
@@ -130,6 +144,18 @@ class CoupleMessage(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     content = Column(Text, nullable=False)
     is_ai_moderator = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CouplePrivateNote(Base):
+    """私下调停：每人单独跟 AI 倾诉，AI 生成'建议对TA说的三句话'。"""
+    __tablename__ = "couple_private_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pair_id = Column(Integer, ForeignKey("couple_pairs.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    feelings = Column(Text, nullable=False)           # 用户私下倾诉
+    suggested_lines = Column(JSON, default=list)      # 建议对TA说的三句话
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

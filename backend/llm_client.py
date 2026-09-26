@@ -159,6 +159,59 @@ def couple_moderator_prompt(user_a_msg: str, user_b_msg: str, context: str = "")
 
 
 # ---- 模拟回复（LLM 未配置时） ----
+def couple_private_threeline(feelings: str) -> List[str]:
+    """私下调停：基于用户私下倾诉，生成'建议对TA说的三句话'。
+
+    使用非暴力沟通（观察-感受-需要-请求）结构。LLM 不可用时返回模板。
+    """
+    fallback = [
+        f"我想先听你说——刚才发生的那件事，你当时是什么感受？",
+        f"我承认我也有做得不好的地方，我希望我们能一起把它说开。",
+        f"我在乎这段关系，我们能不能约定一个下次吵架时的暂停信号？",
+    ]
+    if not _llm_enabled or _llm_client is None:
+        return fallback
+
+    try:
+        system = (
+            "你是心镜的双人关系私下调停顾问。用户正在单独向你倾诉对伴侣的情绪。"
+            "请基于非暴力沟通（观察-感受-需要-请求），生成 3 句'建议他对伴侣说的话'。"
+            "要求：语气柔软、不指责、以'我'开头表达感受与需要。"
+            "只返回 JSON 数组（3 个字符串），不要解释。"
+        )
+        resp = _llm_client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[{"role": "system", "content": system},
+                      {"role": "user", "content": f"用户倾诉: {feelings}"}],
+            temperature=0.6,
+            max_tokens=300,
+            response_format={"type": "json_object"},
+        )
+        text = resp.choices[0].message.content or "{}"
+        data = json.loads(text)
+        lines = data if isinstance(data, list) else data.get("lines", data.get("suggested", []))
+        lines = [str(x) for x in lines][:3]
+        return lines or fallback
+    except Exception as e:
+        logger.error("私下调停 LLM 失败: %s", e)
+        return fallback
+
+
+def gottman_opening_guide() -> Dict[str, Any]:
+    """Gottman 方法中立引导：联合会话开场的结构化步骤。"""
+    return {
+        "stage": "开场 ·  soften startup",
+        "steps": [
+            "第一步：由一方用'我观察到…（只说事实，不评判）'开始",
+            "第二步：说出自己的感受（情绪词），而不是指责对方",
+            "第三步：说出自己的需要和期待",
+            "第四步：向对方提一个具体、可执行的小请求",
+        ],
+        "prompt": "心镜将作为中立 facilitator，不站队。请用'我观察到…我感到…因为…我希望…'的句式开始。",
+    }
+
+
+# ---- 模拟回复（LLM 未配置时） ----
 def _mock_reply(messages: List[Dict[str, str]], persona: str) -> str:
     """生成模拟回复，明确标注。"""
     user_msg = ""

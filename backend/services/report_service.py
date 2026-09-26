@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""报告服务：周复盘 + 分享卡片。"""
+"""报告服务：周复盘 + 分享卡片（玉白云海风格）。"""
 import json
 import logging
 from datetime import datetime, timedelta, date
@@ -105,40 +105,126 @@ def generate_weekly_report(db: Session, user_id: int) -> Dict[str, Any]:
     return result
 
 
-def generate_share_card(db: Session, user_id: int) -> Dict[str, Any]:
-    """生成分享卡片（结构化，不暴露敏感内容）。"""
+def generate_share_card(db: Session, user_id: int, card_type: str = "emotion") -> Dict[str, Any]:
+    """生成分享卡片（玉白云海风格）。
+
+    card_type: emotion 情绪画像 / pattern 关系模式 / triggers 吵架触发器
+    """
     report = generate_weekly_report(db, user_id)
 
-    # 情绪关键词：取高频词前3
     keywords = "、".join(report["high_freq_triggers"][:3]) or "平静"
 
-    # 最平静的一天
     calmest_day = "—"
     if report["intensity_trend"]:
         calm = min(report["intensity_trend"], key=lambda x: x["avg_intensity"])
         calmest_day = calm["date"]
 
-    summary = f"本周记录{sum(report['emotion_distribution'].values())}条，情绪关键词：{keywords}"
+    total = sum(report["emotion_distribution"].values())
+    summary = f"本周记录{total}条 · {keywords}"
 
-    # SVG 卡片
-    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600">
-  <rect width="400" height="600" fill="#faf8f5" rx="20"/>
-  <text x="200" y="80" text-anchor="middle" font-size="24" fill="#5a7a8a" font-family="sans-serif">心镜 · 本周情绪卡</text>
-  <line x1="60" y1="110" x2="340" y2="110" stroke="#d4e6ed" stroke-width="2"/>
-  <text x="200" y="160" text-anchor="middle" font-size="16" fill="#888" font-family="sans-serif">你的情绪关键词</text>
-  <text x="200" y="200" text-anchor="middle" font-size="22" fill="#5a9a7a" font-family="sans-serif">{keywords}</text>
-  <text x="200" y="260" text-anchor="middle" font-size="16" fill="#888" font-family="sans-serif">最平静的一天</text>
-  <text x="200" y="300" text-anchor="middle" font-size="22" fill="#5a7a8a" font-family="sans-serif">{calmest_day}</text>
-  <text x="200" y="360" text-anchor="middle" font-size="14" fill="#999" font-family="sans-serif">{summary}</text>
-  <text x="200" y="450" text-anchor="middle" font-size="13" fill="#bbb" font-family="sans-serif">心镜 · 看见自己，遇见平静</text>
-  <text x="200" y="480" text-anchor="middle" font-size="11" fill="#ccc" font-family="sans-serif">扫码记录你的情绪 →</text>
-</svg>'''
+    titles = {
+        "emotion": ("本周情绪画像", "你的情绪云图"),
+        "pattern": ("关系模式洞察", "看见相处的节奏"),
+        "triggers": ("吵架触发器", "识别情绪的引信"),
+    }
+    title, subtitle = titles.get(card_type, titles["emotion"])
+
+    svg = _build_yunhai_svg(title, subtitle, card_type, report, keywords, calmest_day, summary)
 
     return {
-        "title": "本周心镜记录",
+        "title": title,
+        "card_type": card_type,
         "emotion_keywords": keywords,
         "calmest_day": calmest_day,
         "summary": summary,
         "invite_link": "https://heartmirror.app/invite",
         "svg_content": svg,
     }
+
+
+# ---------- 玉白云海风格 SVG 渲染 ----------
+def _esc(text: Any) -> str:
+    s = str(text)
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _build_yunhai_svg(title: str, subtitle: str, card_type: str,
+                      report: Dict[str, Any], keywords: str,
+                      calmest_day: str, summary: str) -> str:
+    """玉白云海：淡雅白 / 浅青 / 淡墨渐变 + 云海纹理 + 圆角卡片。"""
+    body = _svg_body(card_type, report, keywords, calmest_day)
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="420" height="640" '
+        'viewBox="0 0 420 640" font-family="-apple-system, PingFang SC, Microsoft YaHei, sans-serif">'
+        '<defs>'
+        '<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">'
+        '<stop offset="0%" stop-color="#ffffff"/>'
+        '<stop offset="55%" stop-color="#eef5f7"/>'
+        '<stop offset="100%" stop-color="#dce9ee"/>'
+        '</linearGradient>'
+        '<linearGradient id="ink" x1="0" y1="0" x2="1" y2="0">'
+        '<stop offset="0%" stop-color="#8fb3bf"/>'
+        '<stop offset="100%" stop-color="#5a7a8a"/>'
+        '</linearGradient>'
+        '<radialGradient id="sun" cx="50%" cy="50%" r="50%">'
+        '<stop offset="0%" stop-color="#ffffff" stop-opacity="0.9"/>'
+        '<stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>'
+        '</radialGradient>'
+        '</defs>'
+        '<rect x="0" y="0" width="420" height="640" rx="28" fill="url(#bg)"/>'
+        '<ellipse cx="80" cy="120" rx="120" ry="34" fill="#ffffff" opacity="0.55"/>'
+        '<ellipse cx="330" cy="90" rx="110" ry="30" fill="#ffffff" opacity="0.45"/>'
+        '<ellipse cx="210" cy="560" rx="200" ry="46" fill="#ffffff" opacity="0.5"/>'
+        '<ellipse cx="60" cy="600" rx="130" ry="30" fill="#ffffff" opacity="0.4"/>'
+        '<circle cx="340" cy="150" r="70" fill="url(#sun)"/>'
+        '<circle cx="210" cy="92" r="30" fill="none" stroke="url(#ink)" stroke-width="3"/>'
+        '<path d="M196 92 q14 -18 28 0 q-14 18 -28 0 Z" fill="#7a9a8a" opacity="0.8"/>'
+        f'<text x="210" y="150" text-anchor="middle" font-size="23" font-weight="700" fill="#4a6a7a">{_esc(title)}</text>'
+        f'<text x="210" y="176" text-anchor="middle" font-size="13" fill="#9db8c2">{_esc(subtitle)}</text>'
+        '<line x1="150" y1="192" x2="270" y2="192" stroke="#cfe0e6" stroke-width="1.5"/>'
+        f'{body}'
+        f'<text x="210" y="596" text-anchor="middle" font-size="12" fill="#8aa5b0">{_esc(summary)}</text>'
+        '<text x="210" y="618" text-anchor="middle" font-size="11" fill="#b6c8cf">心镜 · 看见自己，遇见平静</text>'
+        '</svg>'
+    )
+
+
+def _svg_body(card_type: str, report: Dict[str, Any],
+              keywords: str, calmest_day: str) -> str:
+    if card_type == "emotion":
+        dist = report["emotion_distribution"]
+        max_c = max(dist.values()) if dist else 1
+        rows = []
+        y = 230
+        for label, count in sorted(dist.items(), key=lambda x: -x[1])[:5]:
+            w = max(20, int(180 * count / max_c))
+            rows.append(
+                f'<text x="60" y="{y+12}" font-size="13" fill="#5a7a8a">{_esc(label)}</text>'
+                f'<rect x="130" y="{y}" width="{w}" height="16" rx="8" fill="url(#ink)" opacity="0.75"/>'
+                f'<text x="{140+w}" y="{y+12}" font-size="11" fill="#8aa5b0">{count}</text>'
+            )
+            y += 34
+        if not rows:
+            rows.append('<text x="210" y="260" text-anchor="middle" font-size="13" fill="#9db8c2">本周还没有记录，开始记录吧</text>')
+        return "\n  ".join(rows)
+
+    if card_type == "pattern":
+        insights = report.get("relationship_insights", "")
+        chunks = [insights[i:i+18] for i in range(0, len(insights), 18)][:5]
+        tspans = "".join(f'<tspan x="60" dy="{i*22}">{_esc(c)}</tspan>' for i, c in enumerate(chunks))
+        return (
+            '<rect x="40" y="220" width="340" height="210" rx="16" fill="#ffffff" opacity="0.7"/>'
+            '<text x="60" y="250" font-size="13" fill="#7a9a8a" font-weight="600">关系模式</text>'
+            f'<text x="60" y="282" font-size="13" fill="#5a6a72">{tspans}</text>'
+            f'<text x="60" y="410" font-size="12" fill="#9db8c2">最平静的一天：{_esc(calmest_day)}</text>'
+        )
+
+    triggers = report["high_freq_triggers"][:6] or ["暂无明显触发"]
+    chips = []
+    positions = [(60, 250), (200, 250), (120, 310), (260, 310), (80, 370), (230, 370)]
+    for (x, y), w in zip(positions, triggers):
+        chips.append(
+            f'<rect x="{x}" y="{y}" width="{max(76, len(w)*16+24)}" height="30" rx="15" fill="#e3eef2"/>'
+            f'<text x="{x+12}" y="{y+20}" font-size="13" fill="#5a7a8a">⚡ {_esc(w)}</text>'
+        )
+    return "\n  ".join(chips)

@@ -9,7 +9,8 @@ from ..database import get_db
 from ..models import User, CouplePair, CoupleSession
 from ..schemas import (
     CoupleInviteOut, CoupleJoin, CoupleStatusOut,
-    CoupleSessionCreate, CoupleSessionOut, CoupleMessageCreate
+    CoupleSessionCreate, CoupleSessionOut, CoupleMessageCreate,
+    CouplePrivateReflectionCreate, CouplePrivateReflectionOut, GottmanGuideOut,
 )
 from ..services import couple_service
 from .auth import get_current_user
@@ -71,3 +72,32 @@ def end_session(session_id: int, db: Session = Depends(get_db),
     if not session:
         raise HTTPException(status_code=404, detail="会话不存在")
     return CoupleSessionOut.model_validate(session)
+
+
+# ---- 私下调停：各自单独跟 AI 倾诉，生成建议对TA说的三句话 ----
+@router.post("/private/reflection", response_model=CouplePrivateReflectionOut)
+def private_reflection(body: CouplePrivateReflectionCreate,
+                       db: Session = Depends(get_db),
+                       user: User = Depends(get_current_user)):
+    if user.is_minor:
+        raise HTTPException(status_code=403, detail="未成年人模式暂不支持双人配对")
+    note = couple_service.private_reflect(db, user.id, body.feelings)
+    if not note:
+        raise HTTPException(status_code=400, detail="需要先完成配对")
+    return CouplePrivateReflectionOut.model_validate(note)
+
+
+@router.get("/private/notes", response_model=list[CouplePrivateReflectionOut])
+def my_private_notes(db: Session = Depends(get_db),
+                     user: User = Depends(get_current_user)):
+    return couple_service.list_my_private_notes(db, user.id)
+
+
+# ---- Gottman 中立引导：联合会话开场 ----
+@router.post("/session/{session_id}/guide", response_model=GottmanGuideOut)
+def session_guide(session_id: int, db: Session = Depends(get_db),
+                  user: User = Depends(get_current_user)):
+    result = couple_service.get_gottman_guide(db, session_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return result

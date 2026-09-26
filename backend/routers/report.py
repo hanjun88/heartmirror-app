@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """情绪复盘报告路由。"""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -18,5 +18,9 @@ def weekly_report(db: Session = Depends(get_db), user: User = Depends(get_curren
 
 
 @router.get("/share-card", response_model=ShareCard)
-def share_card(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return generate_share_card(db, user.id)
+def share_card(
+    card_type: str = Query("emotion", pattern="^(emotion|pattern|triggers)$"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return generate_share_card(db, user.id, card_type=card_type)

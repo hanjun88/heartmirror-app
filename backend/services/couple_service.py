@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""配对服务：邀请/加入/会话/调解。"""
+"""配对服务：邀请/加入/私下调停/联合会话/Gottman 中立引导。"""
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 from sqlalchemy.orm import Session
 
-from ..models import CouplePair, CoupleSession, CoupleMessage, User
-from ..llm_client import couple_moderator_prompt
+from ..models import CouplePair, CoupleSession, CoupleMessage, CouplePrivateNote, User
+from ..llm_client import couple_moderator_prompt, couple_private_threeline, gottman_opening_guide
 import logging
 
 logger = logging.getLogger(__name__)
@@ -131,3 +131,53 @@ def end_session(db: Session, session_id: int) -> str:
     session.consensus_summary = consensus
     db.commit()
     return consensus
+
+
+# ---- 私下调停（联合会话前各自单独跟 AI 倾诉） ----
+def private_reflect(db: Session, user_id: int, feelings: str) -> Optional[CouplePrivateNote]:
+    """每人单独跟 AI 对话，AI 生成'建议对TA说的三句话'。"""
+    status = get_pair_status(db, user_id)
+    if status.get("status") != "connected" or not status.get("pair_id"):
+        return None
+    lines = couple_private_threeline(feelings)
+    note = CouplePrivateNote(
+        pair_id=status["pair_id"],
+        user_id=user_id,
+        feelings=feelings,
+        suggested_lines=lines,
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return note
+
+
+def list_my_private_notes(db: Session, user_id: int) -> List[CouplePrivateNote]:
+    status = get_pair_status(db, user_id)
+    if not status.get("pair_id"):
+        return []
+    return (
+        db.query(CouplePrivateNote)
+        .filter(CouplePrivateNote.pair_id == status["pair_id"],
+                CouplePrivateNote.user_id == user_id)
+        .order_by(CouplePrivateNote.created_at.desc())
+        .all()
+    )
+
+
+# ---- Gottman 中立引导 ----
+def get_gottman_guide(db: Session, session_id: int) -> Optional[Dict[str, Any]]:
+    """联合会话开始时，返回 Gottman soften startup 的结构化中立引导。"""
+    session = db.query(CoupleSession).filter(CoupleSession.id == session_id).first()
+    if not session:
+        return None
+    guide = gottman_opening_guide()
+    # 写入一条 AI 调解者开场消息
+    opening = CoupleMessage(
+        session_id=session_id, user_id=0,  # 0 表示系统/AI
+        content=f"【中立引导】{guide['stage']}：{guide['prompt']}",
+        is_ai_moderator=True,
+    )
+    db.add(opening)
+    db.commit()
+    return {"session_id": session_id, **guide}
