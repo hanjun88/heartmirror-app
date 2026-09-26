@@ -7,13 +7,9 @@ on:
     branches: [main]
 
 # ── 跨仓 checkout private 引擎仓所需 secret ─────────────────────────────────
-# GitHub 默认 GITHUB_TOKEN 仅对本仓有读权限，无法跨仓读取 private 引擎仓。
-# 必须在 heartmirror-app 仓库手动配置：
-#   Settings → Secrets and variables → Actions → New repository secret
-#   Name:  XINJING_ENGINE_READ_TOKEN
-#   Value: 一个 fine-grained Personal Access Token，
-#          对 hanjun88/xinjing-relationship-engine 仓库授予 "Contents: Read-only" 权限
-# 未配置此 secret 时，test-real-engine job 会在 checkout step 失败（404 / 403）。
+# 使用 SSH Deploy Key（只读）跨仓克隆 private 引擎仓。
+# 公钥已添加到 hanjun88/xinjing-relationship-engine 的 Deploy Keys（read-only）。
+# 私钥存储在 heartmirror-app 仓库 Secret: XINJING_ENGINE_READ_SSH_KEY
 
 jobs:
   # ------------------------------------------------------------------ #
@@ -83,8 +79,8 @@ jobs:
           # 硬编码 pin，禁止 @main / @latest，保证可复现
           ref: 4c4d8da3e5463bc0016c9e267227e6875854f45d
           path: xinjing-engine
-          # private 仓跨仓 checkout：必须使用自定义 PAT（见文件顶部注释）
-          token: ${{ secrets.XINJING_ENGINE_READ_TOKEN }}
+          # private 仓跨仓 checkout：使用 SSH Deploy Key（只读）
+          ssh-key: ${{ secrets.XINJING_ENGINE_READ_SSH_KEY }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
