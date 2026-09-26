@@ -100,9 +100,9 @@ jobs:
 
       - name: Point engine client at the checked-out engine
         run: |
-          echo "XINJING_ENGINE_PATH=${{ github.workspace }}/xinjing-engine" >> $GITHUB_ENV
-          # 确认 engine 包就位
-          ls "${{ github.workspace }}/xinjing-engine/engine/meta_arbiter.py"
+          # 引擎仓嵌套结构: xinjing-relationship-engine/xinjing-relationship-engine/engine/
+          echo "XINJING_ENGINE_PATH=${{ github.workspace }}/xinjing-engine/xinjing-relationship-engine" >> $GITHUB_ENV
+          ls "${{ github.workspace }}/xinjing-engine/xinjing-relationship-engine/engine/meta_arbiter.py"
 
       - name: Run engine contract tests (real engine, no mocks)
         run: |
