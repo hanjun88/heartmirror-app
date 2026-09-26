@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import ChatMessage, User
 from ..schemas import ChatRequest, ChatResponse, ChatHistoryOut, MemoryOut
-from ..divination import SafetyInput, check_safe_boundary
+from ..divination import SafetyInput, check_safe_boundary, DivinationEnrichment
 from ..engine_client import arbitrate
 from ..llm_client import chat_completion, SOUL_PERSONAS
 from ..services.memory_service import recall_memories, extract_and_store, build_memory_context
@@ -15,6 +15,10 @@ from .auth import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+# P4：占星侧注单例。provider_fn=None 时 enrich() 永远返回 degraded（安全默认值），
+# 便于测试 monkeypatch 替换为 MagicMock 或注入可控 provider。
+_divination_enrichment = DivinationEnrichment(provider_fn=None)
 
 CRISIS_REPLY_TEMPLATE = (
     "我听到你说的话了，你的安全最重要。\n\n"
@@ -115,6 +119,18 @@ def chat(body: ChatRequest, db: Session = Depends(get_db),
     recalled = recall_memories(db, user.id, body.message, top_k=5)
     memory_context = build_memory_context(recalled)
 
+    # P4：占星侧注（仅非危机、非 SAFETY_PLAN 时启用；绝不影响安全决策）
+    # 硬约束：enrichment 只在危机分支 + SAFE_DEGRADED 分支都已提前 return 之后才执行；
+    # SAFETY_PLAN 显式跳过；任何异常只 log warning，绝不阻断主流程。
+    divination_annotation = ""
+    if target_level not in ("CRISIS", "SAFETY_PLAN"):
+        try:
+            div_result = _divination_enrichment.enrich(body.message)
+            if div_result.is_usable:
+                divination_annotation = DivinationEnrichment.render_annotation(div_result)
+        except Exception as e:
+            logger.warning("占星侧注获取失败（已忽略，不影响对话）: %s", e)
+
     # 4. 构建 system prompt（人格 + 用户档案 + 记忆）
     persona_cfg = SOUL_PERSONAS.get(user.soul_persona, SOUL_PERSONAS["warm"])
     system_parts = [persona_cfg["system_prompt"]]
@@ -132,6 +148,9 @@ def chat(body: ChatRequest, db: Session = Depends(get_db),
 
     if memory_context:
         system_parts.append(memory_context)
+
+    if divination_annotation:
+        system_parts.append("【占星侧注 · 仅供参考 · 不影响安全评估】\n" + divination_annotation)
 
     system_prompt = "\n\n".join(system_parts)
 
