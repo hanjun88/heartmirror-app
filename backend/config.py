@@ -13,7 +13,14 @@ ENGINE_REPO_PATH = os.getenv(
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./heartmirror.db")
 
 # JWT
-JWT_SECRET = os.getenv("JWT_SECRET", "heartmirror-dev-secret-change-in-production")
+# 安全硬约束：JWT_SECRET 必须由环境变量显式提供，且长度 >= 32。
+# 未设置或过短时应用启动直接失败，杜绝默认密钥被攻击者伪造 token。
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+if not JWT_SECRET or len(JWT_SECRET) < 32:
+    raise RuntimeError(
+        "JWT_SECRET must be set and at least 32 characters "
+        "(refuse to start with a default/short secret)."
+    )
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -30,6 +37,13 @@ CRISIS_HOTLINE = "12356"
 
 # 象征层置信硬锁
 SYMBOLIC_CONFIDENCE_LOCK = (0.36, 0.40)
+
+# CORS：显式 allowlist（逗号分隔），不再使用通配符 "*"
+_DEFAULT_WEB_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000"
+WEB_ORIGINS = [
+    o.strip() for o in os.getenv("WEB_ORIGINS", _DEFAULT_WEB_ORIGINS).split(",")
+    if o.strip()
+]
 
 # 前端静态文件目录
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"

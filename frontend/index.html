@@ -106,20 +106,34 @@ input:focus, textarea:focus { border-color: #5a7a8a; }
 
   <!-- 3. 记忆 Tab -->
   <section id="tab-memory" class="hidden">
-    <h2 class="text-lg font-semibold text-deep mb-3">心镜记住的</h2>
-    <div class="bg-sky rounded-2xl p-3 mb-4">
-      <p class="text-sm text-deep"><strong>Soul 层：</strong><span id="soul-display">温暖陪伴型</span></p>
-      <select id="soul-select" class="w-full mt-1 border rounded-lg px-2 py-1 text-sm" onchange="changeSoul()">
-        <option value="warm">温暖陪伴型</option>
-        <option value="rational">理性分析型</option>
-        <option value="humor">幽默开导型</option>
+    <h2 class="text-lg font-semibold text-deep mb-3">四层记忆系统</h2>
+
+    <!-- 新增记忆表单 -->
+    <div class="bg-white rounded-2xl p-3 mb-3 shadow-sm">
+      <p class="text-sm font-semibold text-deep mb-2">记录一条记忆</p>
+      <select id="mem-layer" class="w-full border rounded-lg px-2 py-1.5 text-sm mb-2">
+        <option value="soul">灵魂层 · 核心价值观</option>
+        <option value="user">画像层 · 关于我</option>
+        <option value="memory" selected>事件层 · 经历</option>
+        <option value="agent">偏好层 · 陪伴方式</option>
       </select>
+      <textarea id="mem-content" placeholder="写点什么，比如：我最看重真诚" class="w-full border rounded-lg px-3 py-2 h-16"></textarea>
+      <div class="flex gap-2 mt-2">
+        <select id="mem-importance" class="border rounded-lg px-2 py-1.5 text-sm">
+          <option value="1">重要性1</option><option value="2">2</option>
+          <option value="3" selected>3</option><option value="4">4</option><option value="5">5</option>
+        </select>
+        <button onclick="addMemory()" class="flex-1 bg-deep text-white rounded-lg py-1.5">添加</button>
+      </div>
     </div>
-    <div class="bg-white rounded-2xl p-3 mb-4 shadow-sm">
-      <p class="text-sm text-gray-600"><strong>User 层档案</strong></p>
-      <div id="user-profile-display" class="text-sm mt-1 text-gray-700">加载中...</div>
+
+    <!-- 四层子 Tab -->
+    <div class="flex gap-1 mb-3 text-xs overflow-x-auto">
+      <button onclick="switchMemLayer('soul')" data-ml="soul" class="mem-tab px-3 py-1.5 rounded-full whitespace-nowrap">灵魂</button>
+      <button onclick="switchMemLayer('user')" data-ml="user" class="mem-tab px-3 py-1.5 rounded-full whitespace-nowrap">画像</button>
+      <button onclick="switchMemLayer('memory')" data-ml="memory" class="mem-tab px-3 py-1.5 rounded-full whitespace-nowrap">事件</button>
+      <button onclick="switchMemLayer('agent')" data-ml="agent" class="mem-tab px-3 py-1.5 rounded-full whitespace-nowrap">偏好</button>
     </div>
-    <h3 class="text-md font-semibold text-deep mb-2">Memory 层</h3>
     <div id="memory-list"></div>
   </section>
 
@@ -140,30 +154,54 @@ input:focus, textarea:focus { border-color: #5a7a8a; }
       <h3 class="text-sm font-semibold text-deep mb-2">下周建议</h3>
       <ul id="report-suggestions" class="text-sm text-gray-700 list-disc pl-5"></ul>
     </div>
-    <button onclick="loadShareCard()" class="w-full bg-warm text-white rounded-lg py-2">生成分享卡片</button>
-    <div id="share-card-area" class="mt-3"></div>
+    <div class="bg-white rounded-2xl p-4 shadow-sm mb-4">
+      <h3 class="text-sm font-semibold text-deep mb-2">分享卡片 · 玉白云海</h3>
+      <div class="flex gap-1 mb-3 text-xs">
+        <button onclick="loadShareCard('emotion')" data-st="emotion" class="stype-btn flex-1 px-2 py-1 rounded-full bg-sky text-deep">情绪画像</button>
+        <button onclick="loadShareCard('pattern')" data-st="pattern" class="stype-btn flex-1 px-2 py-1 rounded-full text-gray-500">关系模式</button>
+        <button onclick="loadShareCard('triggers')" data-st="triggers" class="stype-btn flex-1 px-2 py-1 rounded-full text-gray-500">吵架触发器</button>
+      </div>
+      <button onclick="loadShareCard(currentCardType)" class="w-full bg-warm text-white rounded-lg py-2">生成卡片</button>
+      <div id="share-card-area" class="mt-3 flex justify-center"></div>
+      <button id="png-dl-btn" onclick="downloadPNG()" class="hidden w-full mt-2 border border-deep text-deep rounded-lg py-2">下载 PNG</button>
+    </div>
   </section>
 
   <!-- 5. 双人 Tab -->
   <section id="tab-couple" class="hidden">
-    <h2 class="text-lg font-semibold text-deep mb-3">双人配对</h2>
+    <h2 class="text-lg font-semibold text-deep mb-3">双人模式</h2>
     <div id="couple-status-area" class="bg-white rounded-2xl p-4 shadow-sm mb-4">
       <p class="text-sm text-gray-600">加载中...</p>
     </div>
     <div class="flex gap-2 mb-4">
-      <button onclick="createInvite()" class="flex-1 bg-deep text-white rounded-lg py-2">生成邀请码</button>
+      <button onclick="createInvite()" class="flex-1 bg-deep text-white rounded-lg py-2">创建邀请</button>
       <button onclick="document.getElementById('join-input').classList.toggle('hidden')" class="flex-1 bg-sky text-deep rounded-lg py-2">输入邀请码</button>
     </div>
     <div id="join-input" class="hidden mb-4 flex gap-2">
       <input id="invite-code-input" placeholder="输入邀请码" class="flex-1 border rounded-lg px-3 py-2">
       <button onclick="joinCouple()" class="bg-deep text-white rounded-lg px-4 py-2">加入</button>
     </div>
-    <div id="couple-session-area" class="hidden">
-      <button onclick="startSession()" class="w-full bg-sage text-white rounded-lg py-2 mb-3">开始联合会话</button>
-      <div id="session-messages" class="space-y-2 mb-2"></div>
-      <div class="flex gap-2">
-        <input id="session-input" placeholder="对TA说..." class="flex-1 border rounded-full px-4 py-2">
-        <button onclick="sendSessionMsg()" class="bg-sage text-white rounded-full px-4 py-2">发送</button>
+
+    <!-- 配对成功后：私下调停 -->
+    <div id="couple-private-area" class="hidden">
+      <div class="bg-sky rounded-2xl p-4 mb-3">
+        <p class="text-sm font-semibold text-deep mb-2">① 私下调停（只有你和 AI）</p>
+        <p class="text-xs text-gray-500 mb-2">先单独跟心镜说说你的感受，AI 会帮你整理"建议对TA说的三句话"。</p>
+        <textarea id="private-feelings" placeholder="你现在对TA有什么想说但没说出口的？" class="w-full border rounded-lg px-3 py-2 h-20"></textarea>
+        <button onclick="privateReflect()" class="w-full bg-deep text-white rounded-lg py-2 mt-2">生成建议三句话</button>
+        <div id="private-result" class="mt-2"></div>
+      </div>
+
+      <!-- 联合会话 -->
+      <div class="bg-white rounded-2xl p-4 shadow-sm">
+        <p class="text-sm font-semibold text-deep mb-2">② 联合会话（Gottman 中立引导）</p>
+        <div id="gottman-guide" class="text-xs text-gray-600 mb-2"></div>
+        <button onclick="startSession()" class="w-full bg-sage text-white rounded-lg py-2 mb-3">开始联合会话</button>
+        <div id="session-messages" class="space-y-2 mb-2 max-h-64 overflow-y-auto"></div>
+        <div class="flex gap-2">
+          <input id="session-input" placeholder="用'我观察到…我感到…'开始" class="flex-1 border rounded-full px-4 py-2">
+          <button onclick="sendSessionMsg()" class="bg-sage text-white rounded-full px-4 py-2">发送</button>
+        </div>
       </div>
     </div>
   </section>
@@ -271,7 +309,7 @@ function switchTab(name) {
   });
   if (name === 'diary') loadDiaries();
   if (name === 'chat') loadChatHistory();
-  if (name === 'memory') loadMemories();
+  if (name === 'memory') switchMemLayer(currentMemLayer);
   if (name === 'report') loadReport();
   if (name === 'couple') loadCoupleStatus();
 }
@@ -336,41 +374,57 @@ async function loadChatHistory() {
   } catch(e) {}
 }
 
-// ---- 记忆 ----
+// ---- 记忆（四层） ----
+let currentMemLayer = 'memory';
 async function loadMemories() {
   try {
-    const data = await api('/memory');
-    document.getElementById('memory-list').innerHTML = data.map(m => `
-      <div class="memory-card">
-        <div class="flex justify-between items-start">
-          <p class="text-sm flex-1">${esc(m.content)}</p>
-          ${m.is_pinned ? '<span class="text-warm text-xs">📌</span>' : ''}
-        </div>
-        <div class="flex justify-between mt-1 text-xs text-gray-400">
-          <span>${m.emotion || ''} · 重要性${m.importance}</span>
-          <button onclick="deleteMemory(${m.id})" class="text-red-400">删除</button>
-        </div>
-      </div>
-    `).join('') || '<p class="text-gray-400 text-sm">还没有记忆，开始对话后心镜会自动记住重要的事</p>';
-
-    // User 层档案
-    const me = await api('/auth/me');
-    document.getElementById('user-profile-display').innerHTML = `
-      昵称: ${esc(me.nickname)}<br>
-      依恋类型: ${me.attachment_type || '未测评'}<br>
-      爱语: ${me.love_language || '未测评'}<br>
-      冲突风格: ${me.conflict_style || '未测评'}
-    `;
+    const data = await api('/memory?layer=' + currentMemLayer + '&limit=200');
+    renderMemories(data);
   } catch(e) {}
+}
+function renderMemories(data) {
+  const el = document.getElementById('memory-list');
+  el.innerHTML = data.map(m => `
+    <div class="memory-card">
+      <div class="flex justify-between items-start">
+        <p class="text-sm flex-1">${esc(m.content)}</p>
+        <button onclick="togglePin(${m.id}, ${!m.is_pinned})" class="ml-2 ${m.is_pinned ? 'text-warm' : 'text-gray-300'}">📌</button>
+      </div>
+      <div class="flex justify-between mt-1 text-xs text-gray-400">
+        <span>${m.emotion || m.layer} · 重要性${m.importance}</span>
+        <button onclick="deleteMemory(${m.id})" class="text-red-400">删除</button>
+      </div>
+    </div>
+  `).join('') || '<p class="text-gray-400 text-sm">这一层还没有记忆</p>';
+}
+function switchMemLayer(layer) {
+  currentMemLayer = layer;
+  document.querySelectorAll('.mem-tab').forEach(b => {
+    const on = b.dataset.ml === layer;
+    b.classList.toggle('bg-deep', on); b.classList.toggle('text-white', on);
+    b.classList.toggle('text-gray-500', !on);
+  });
+  loadMemories();
+}
+async function addMemory() {
+  try {
+    await api('/memory', { method: 'POST', body: JSON.stringify({
+      content: document.getElementById('mem-content').value,
+      layer: document.getElementById('mem-layer').value,
+      importance: parseInt(document.getElementById('mem-importance').value),
+    })});
+    document.getElementById('mem-content').value = '';
+    showToast('已添加');
+    loadMemories();
+  } catch(e) { showToast(e.message); }
+}
+async function togglePin(id, pinned) {
+  await api('/memory/' + id, { method: 'PUT', body: JSON.stringify({ is_pinned: pinned }) });
+  loadMemories();
 }
 async function deleteMemory(id) {
   await api('/memory/' + id, { method: 'DELETE' });
   loadMemories();
-}
-async function changeSoul() {
-  const persona = document.getElementById('soul-select').value;
-  await api('/auth/me', { method: 'PUT', body: JSON.stringify({ soul_persona: persona }) });
-  showToast('已切换人格');
 }
 
 // ---- 报告 ----
@@ -398,11 +452,40 @@ async function loadReport() {
     document.getElementById('report-suggestions').innerHTML = data.next_week_suggestions.map(s=>`<li>${esc(s)}</li>`).join('');
   } catch(e) {}
 }
-async function loadShareCard() {
+let currentCardType = 'emotion', currentSVG = '';
+async function loadShareCard(type = 'emotion') {
+  currentCardType = type;
   try {
-    const data = await api('/report/share-card');
-    document.getElementById('share-card-area').innerHTML = `<div class="bg-white rounded-2xl p-4 shadow-sm text-center">${data.svg_content}</div>`;
-  } catch(e) {}
+    const data = await api('/report/share-card?card_type=' + type);
+    currentSVG = data.svg_content;
+    document.querySelectorAll('.stype-btn').forEach(b => {
+      const on = b.dataset.st === type;
+      b.classList.toggle('bg-sky', on); b.classList.toggle('text-deep', on);
+      b.classList.toggle('text-gray-500', !on);
+    });
+    document.getElementById('share-card-area').innerHTML = data.svg_content;
+    document.getElementById('png-dl-btn').classList.remove('hidden');
+  } catch(e) { showToast(e.message); }
+}
+function downloadPNG() {
+  if (!currentSVG) return;
+  const blob = new Blob([currentSVG], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    const scale = 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = 420 * scale; canvas.height = 640 * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    ctx.drawImage(img, 0, 0, 420, 640);
+    URL.revokeObjectURL(url);
+    const a = document.createElement('a');
+    a.download = 'heartmirror-' + currentCardType + '.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  };
+  img.src = url;
 }
 
 // ---- 双人 ----
@@ -412,14 +495,17 @@ async function loadCoupleStatus() {
     let html = `<p class="text-sm">状态: ${data.status}</p>`;
     if (data.partner_nickname) html += `<p class="text-sm text-deep">伴侣: ${esc(data.partner_nickname)}</p>`;
     document.getElementById('couple-status-area').innerHTML = html;
-    document.getElementById('couple-session-area').classList.toggle('hidden', data.status !== 'connected');
+    document.getElementById('couple-private-area').classList.toggle('hidden', data.status !== 'connected');
   } catch(e) { document.getElementById('couple-status-area').innerHTML = '<p class="text-sm text-gray-400">请先登录</p>'; }
 }
 async function createInvite() {
   try {
     const data = await api('/couple/invite', { method: 'POST', body: '{}' });
-    showToast('邀请码: ' + data.invite_code);
-    document.getElementById('couple-status-area').innerHTML = `<p class="text-sm">邀请码: <strong class="text-deep text-lg">${data.invite_code}</strong></p><p class="text-xs text-gray-400">24小时内有效</p>`;
+    const link = location.origin + '/#join=' + data.invite_code;
+    document.getElementById('couple-status-area').innerHTML =
+      `<p class="text-sm">邀请码: <strong class="text-deep text-lg">${data.invite_code}</strong></p>
+       <p class="text-xs text-gray-400 mt-1">把下面链接发给TA，24小时内有效：</p>
+       <input readonly value="${link}" class="w-full text-xs border rounded px-2 py-1 mt-1" onclick="this.select()">`;
   } catch(e) { showToast(e.message); }
 }
 async function joinCouple() {
@@ -430,11 +516,26 @@ async function joinCouple() {
     loadCoupleStatus();
   } catch(e) { showToast(e.message); }
 }
+async function privateReflect() {
+  try {
+    const feelings = document.getElementById('private-feelings').value.trim();
+    if (!feelings) return showToast('先说说你的感受');
+    const data = await api('/couple/private/reflection', { method: 'POST', body: JSON.stringify({ feelings }) });
+    document.getElementById('private-result').innerHTML =
+      '<div class="bg-white rounded-lg p-3 mt-2 text-sm"><p class="text-deep font-medium mb-1">建议对TA说：</p>' +
+      data.suggested_lines.map((l,i)=>`<p class="mb-1">${i+1}. ${esc(l)}</p>`).join('') + '</div>';
+  } catch(e) { showToast(e.message); }
+}
 let currentSessionId = null;
 async function startSession() {
   try {
     const data = await api('/couple/session', { method: 'POST', body: '{}' });
     currentSessionId = data.id;
+    // Gottman 中立引导
+    const guide = await api(`/couple/session/${currentSessionId}/guide`, { method: 'POST', body: '{}' });
+    document.getElementById('gottman-guide').innerHTML =
+      `<span class="text-sage font-medium">${esc(guide.stage)}</span><br>` +
+      guide.steps.map(s=>'· '+esc(s)).join('<br>');
     showToast('会话已开始');
   } catch(e) { showToast(e.message); }
 }
@@ -446,7 +547,8 @@ async function sendSessionMsg() {
   try {
     const data = await api(`/couple/session/${currentSessionId}/message`, { method: 'POST', body: JSON.stringify({ content }) });
     const el = document.getElementById('session-messages');
-    el.innerHTML += `<div class="bg-white rounded-lg p-2 text-sm"><p>${esc(data.user_message.content)}</p><p class="text-deep text-xs mt-1">🤖 ${esc(data.moderator_reply)}</p></div>`;
+    el.innerHTML += `<div class="bg-white rounded-lg p-2 text-sm shadow-sm"><p>${esc(data.user_message.content)}</p><p class="text-deep text-xs mt-1">🤖 ${esc(data.moderator_reply)}</p></div>`;
+    el.scrollTop = el.scrollHeight;
   } catch(e) { showToast(e.message); }
 }
 

@@ -9,8 +9,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from .database import init_db
-from .config import FRONTEND_DIR
-from .routers import auth, diary, memory, chat, report, couple, assessment, compliance
+from .config import FRONTEND_DIR, WEB_ORIGINS
+from .routers import auth, diary, memory, chat, report, couple, assessment, compliance, proactive
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,10 +40,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="心镜 HeartMirror API", version="0.1.0", lifespan=lifespan)
 
-# CORS
+# CORS：使用显式 allowlist（来自环境变量 WEB_ORIGINS），禁止通配符 "*"
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=WEB_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -58,6 +58,7 @@ app.include_router(report.router)
 app.include_router(couple.router)
 app.include_router(assessment.router)
 app.include_router(compliance.router)
+app.include_router(proactive.router)
 
 
 @app.get("/")

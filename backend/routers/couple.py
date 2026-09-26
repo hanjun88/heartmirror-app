@@ -67,10 +67,8 @@ def session_message(session_id: int, body: CoupleMessageCreate,
 @router.post("/session/{session_id}/end", response_model=CoupleSessionOut)
 def end_session(session_id: int, db: Session = Depends(get_db),
                 user: User = Depends(get_current_user)):
-    summary = couple_service.end_session(db, session_id)
-    session = db.query(CoupleSession).filter(CoupleSession.id == session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="会话不存在")
+    summary = couple_service.end_session(db, session_id, user_id=user.id)
+    session = couple_service._load_session_or_404(db, session_id)
     return CoupleSessionOut.model_validate(session)
 
 
@@ -97,7 +95,7 @@ def my_private_notes(db: Session = Depends(get_db),
 @router.post("/session/{session_id}/guide", response_model=GottmanGuideOut)
 def session_guide(session_id: int, db: Session = Depends(get_db),
                   user: User = Depends(get_current_user)):
-    result = couple_service.get_gottman_guide(db, session_id)
+    result = couple_service.get_gottman_guide(db, session_id, user_id=user.id)
     if not result:
         raise HTTPException(status_code=404, detail="会话不存在")
     return result

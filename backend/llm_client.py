@@ -2,7 +2,7 @@
 """LLM 调用封装：OpenAI 兼容接口，未配置时用模拟回复并标注。"""
 import json
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 from .config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
 

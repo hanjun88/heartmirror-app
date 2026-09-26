@@ -146,6 +146,7 @@ class WeeklyReport(BaseModel):
 
 class ShareCard(BaseModel):
     title: str
+    card_type: str = "emotion"
     emotion_keywords: str
     calmest_day: str
     summary: str
@@ -181,9 +182,13 @@ class CoupleSessionCreate(BaseModel):
 class CoupleSessionOut(BaseModel):
     id: int
     status: str
+    turn: str = "waiting_a"
     started_at: datetime
     ended_at: Optional[datetime] = None
     consensus_summary: str = ""
+
+    class Config:
+        from_attributes = True
 
 
 class CoupleMessageCreate(BaseModel):

@@ -1,8 +1,15 @@
 # -*- coding: utf-8 -*-
-"""封装对 xinjing 引擎的调用：同进程 import，fail-closed 降级。"""
+"""封装对 xinjing 引擎的调用：同进程 import，fail-closed 降级。
+
+安全决策单一权威原则：
+- 正常路径下，危机与风险判断统一由 xinjing engine 的 crisis_scan + Meta-Arbiter 完成，
+  应用层不再自行构造关键词风险信号（has_weapon_threat / lethality_score 等）。
+- 仅当引擎不可用（加载失败 / 调用抛异常）时，才触发独立硬规则危机扫描作为最后防线。
+- 引擎异常且硬规则未命中时，返回 SAFE_DEGRADED（安全降级），绝不允许进入普通 LLM 自由对话。
+"""
 import sys
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .config import ENGINE_REPO_PATH, SYMBOLIC_CONFIDENCE_LOCK, CRISIS_HOTLINE
 
@@ -45,97 +52,114 @@ except Exception as e:
     _engine_available = False
 
 
+# ---- 独立硬规则危机扫描（最后防线，仅引擎不可用时使用） ----
+_HARD_RISK_KEYWORDS = [
+    "自杀", "自伤", "想死", "活不下去", "不想活", "结束生命",
+    "杀了", "伤害自己", "跳楼", "割腕", "吃药过量", "抑郁到极点", "没有出路",
+]
+
+
+def _hard_rule_crisis_scan(text: str) -> List[str]:
+    """关键词级硬规则危机扫描。
+
+    注意：此函数仅作为引擎不可用时的最后防线，不参与正常路径的安全决策。
+    """
+    lowered = (text or "").lower()
+    return [k for k in _HARD_RISK_KEYWORDS if k.lower() in lowered]
+
+
 def is_engine_available() -> bool:
     return _engine_available
 
 
-def arbitrate(text: str, user_id: str = "anonymous") -> Dict[str, Any]:
-    """安全分流：危机检测 + Meta-Arbiter 路由。
+def _crisis_result(hits: List[str], intervention: str, error: Optional[str] = None) -> Dict[str, Any]:
+    """构造危机命中返回。"""
+    result: Dict[str, Any] = {
+        "is_crisis": True,
+        "matched_terms": hits,
+        "target_level": "CRISIS",
+        "intervention": intervention,
+        "hotline": CRISIS_HOTLINE,
+        "is_symbolic_annotation": False,
+    }
+    if error:
+        result["error"] = error
+    return result
 
-    返回:
-        {
-            "is_crisis": bool,
-            "matched_terms": list,
-            "target_level": str | None,
-            "intervention": str,
-            "hotline": str | None,
-            "is_symbolic_annotation": False,
-        }
+
+def _safe_degraded_result(error: str) -> Dict[str, Any]:
+    """构造安全降级返回：不进入普通 LLM 自由对话。"""
+    return {
+        "is_crisis": False,
+        "matched_terms": [],
+        "target_level": "SAFE_DEGRADED",
+        "intervention": "",
+        "hotline": CRISIS_HOTLINE,
+        "is_symbolic_annotation": False,
+        "error": error,
+    }
+
+
+def arbitrate(text: str, user_id: str = "anonymous") -> Dict[str, Any]:
+    """安全分流：危机检测 + Meta-Arbiter 路由（fail-closed）。
+
+    返回 target_level 可能取值：
+        - "CRISIS"        危机，必须熔断并给出热线
+        - "SAFE_DEGRADED" 引擎不可用且硬规则未命中，应用层不得进入普通 LLM 自由对话
+        - "REPAIR"/"STABILIZE"/"SAFETY_PLAN" 等引擎正常路由结果
     """
+    # 引擎整体加载失败：直接走最后防线
     if not _engine_available:
-        # 降级模式：简单关键词扫描
-        crisis_keywords = ["不想活", "自杀", "自残", "轻生", "想死", "suicide", "kill myself",
-                          "活不下去", "结束生命", "了结自己"]
-        hits = [k for k in crisis_keywords if k in text.lower()]
+        hits = _hard_rule_crisis_scan(text)
         if hits:
-            return {
-                "is_crisis": True,
-                "matched_terms": hits,
-                "target_level": "CRISIS",
-                "intervention": "检测到危机信号，请立即拨打心理援助热线。",
-                "hotline": CRISIS_HOTLINE,
-                "is_symbolic_annotation": False,
-            }
-        return {
-            "is_crisis": False,
-            "matched_terms": [],
-            "target_level": "REPAIR",
-            "intervention": "",
-            "hotline": None,
-            "is_symbolic_annotation": False,
-        }
+            return _crisis_result(
+                hits,
+                "检测到危机信号（硬规则兜底），请立即拨打心理援助热线。",
+                error="engine_unavailable_hard_rule_triggered",
+            )
+        return _safe_degraded_result("engine_unavailable")
 
     try:
-        # 0 级危机扫描
+        # 0 级危机扫描（引擎权威判断）
         verdict = _crisis_scan_fn(text)
         if verdict.is_crisis:
-            return {
-                "is_crisis": True,
-                "matched_terms": verdict.matched_terms,
-                "target_level": "CRISIS",
-                "intervention": "检测到自伤/轻生信号，已触发危机熔断。",
-                "hotline": CRISIS_HOTLINE,
-                "is_symbolic_annotation": False,
-            }
+            return _crisis_result(
+                list(verdict.matched_terms),
+                "检测到自伤/轻生信号，已触发危机熔断。",
+            )
 
-        # Meta-Arbiter 路由
-        ra = _RiskAssessment(
-            has_weapon_threat=any(k in text for k in ("刀", "枪", "杀了我", "同归于尽")),
-            has_strangulation=any(k in text for k in ("掐", "勒", "扼")),
-            has_suicidal_intent=False,  # crisis_scan 已处理
-            fear_of_death=any(k in text for k in ("怕死", "会死", "杀身")),
-            lethality_score=min(15, sum(1 for k in ("打", "威胁", "恐吓", "控制", "砸", "骂", "跟踪")
-                                        if k in text) * 3),
-        )
+        # Meta-Arbiter 路由（单一权威）。
+        # F2：应用层不再自行注入关键词风险信号，RiskAssessment 使用引擎默认中性值，
+        # 风险判断完全由 Meta-Arbiter 基于 raw_statement 完成。
+        ra = _RiskAssessment()
         ctx = _CaseContext(
             user_id=user_id,
             raw_statement=text,
             risk_assessment=ra,
-            somatic_activation=0.8 if any(k in text for k in ("闪回", "发抖", "心慌", "喘不上气", "解离", "噩梦")) else 0.2,
-            relational_conflict=any(k in text for k in ("吵架", "冷战", "出轨", "离婚", "分手", "关系")),
         )
         arbiter = _MetaArbiter()
         chain = arbiter.route(ctx)
         node = chain.nodes[0] if chain.nodes else None
         return {
             "is_crisis": chain.is_terminal_crisis,
-            "matched_terms": verdict.matched_terms,
+            "matched_terms": list(verdict.matched_terms),
             "target_level": node.target_level.name if node else None,
             "intervention": node.output_payload.get("intervention", "") if node else "",
             "hotline": CRISIS_HOTLINE if chain.is_terminal_crisis else None,
             "is_symbolic_annotation": False,
         }
     except Exception as e:
-        logger.error("arbitrate 引擎调用失败: %s", e)
-        return {
-            "is_crisis": False,
-            "matched_terms": [],
-            "target_level": "REPAIR",
-            "intervention": "",
-            "hotline": None,
-            "is_symbolic_annotation": False,
-            "error": "engine_degraded",
-        }
+        # P0-B：引擎调用异常时绝不能 fail-open 进入 REPAIR。
+        # 先做硬规则危机扫描；命中则 CRISIS，否则 SAFE_DEGRADED。
+        logger.error("arbitrate 引擎调用失败，执行 fail-closed 降级: %s", e)
+        hits = _hard_rule_crisis_scan(text)
+        if hits:
+            return _crisis_result(
+                hits,
+                "检测到危机信号（引擎异常时硬规则兜底），请立即拨打心理援助热线。",
+                error="engine_unavailable_hard_rule_triggered",
+            )
+        return _safe_degraded_result("engine_unavailable")
 
 
 def natal(dt_utc: str, lat: float, lon: float) -> Dict[str, Any]:

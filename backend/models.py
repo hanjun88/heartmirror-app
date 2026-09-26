@@ -131,6 +131,9 @@ class CoupleSession(Base):
     id = Column(Integer, primary_key=True, index=True)
     pair_id = Column(Integer, ForeignKey("couple_pairs.id"), nullable=False)
     status = Column(String(20), default="active")  # active/ended
+    # F1 双人交替发言状态机：waiting_a / waiting_b / mediating
+    # 默认 waiting_a，老库加列后由默认值兜底，兼容历史数据。
+    turn = Column(String(20), default="waiting_a", nullable=False, server_default="waiting_a")
     started_at = Column(DateTime, default=datetime.utcnow)
     ended_at = Column(DateTime, nullable=True)
     consensus_summary = Column(Text, default="")

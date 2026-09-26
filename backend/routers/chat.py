@@ -22,13 +22,41 @@ CRISIS_REPLY_TEMPLATE = (
     "你不是一个人，有很多人愿意帮助你。请先照顾好自己。"
 )
 
+# 安全降级回复：引擎不可用时不允许进入普通 LLM 自由对话
+SAFE_DEGRADED_REPLY_TEMPLATE = (
+    "系统当前正在维护，暂时无法提供智能陪伴对话。\n\n"
+    "如果你情绪上很难受，可以先尝试做几次缓慢的深呼吸；"
+    "也欢迎稍后再回来，或直接联系真人心理咨询师。\n\n"
+    "如遇紧急心理危机，请拨打全国心理援助热线：12356（24小时）。"
+)
+
+
+def _persist_assistant_reply(db: Session, user_id: int, content: str, crisis: bool):
+    """落库一条 AI 回复（用户消息已由调用方落库或不落库视情况而定）。"""
+    ai_msg = ChatMessage(
+        user_id=user_id, role="assistant", content=content,
+        is_crisis_response=crisis,
+    )
+    db.add(ai_msg)
+    db.commit()
+
 
 @router.post("", response_model=ChatResponse)
 def chat(body: ChatRequest, db: Session = Depends(get_db),
          user: User = Depends(get_current_user)):
     # 1. 危机扫描（硬约束，不走 LLM）
     arb_result = arbitrate(body.message, user_id=str(user.id))
-    if arb_result.get("is_crisis"):
+
+    # 第二层 fail-closed 门：即使 arbitrate 返回异常格式或缺失字段，
+    # 也默认走安全降级，而不是冒险进入普通 LLM 自由对话。
+    raw_is_crisis = arb_result.get("is_crisis")
+    target_level = arb_result.get("target_level")
+    is_crisis = raw_is_crisis is True
+    if not isinstance(target_level, str) or not target_level:
+        # 异常返回：降级处理
+        target_level = "SAFE_DEGRADED"
+
+    if is_crisis:
         crisis_msg = ChatMessage(
             user_id=user.id, role="user", content=body.message, is_crisis_response=True
         )
@@ -42,6 +70,24 @@ def chat(body: ChatRequest, db: Session = Depends(get_db),
         return ChatResponse(
             reply=CRISIS_REPLY_TEMPLATE,
             is_crisis=True,
+            new_memories=[],
+        )
+
+    # 安全降级门：引擎不可用/异常时，禁止进入普通 LLM 自由对话
+    if target_level == "SAFE_DEGRADED":
+        degraded_msg = ChatMessage(
+            user_id=user.id, role="user", content=body.message, is_crisis_response=False,
+        )
+        db.add(degraded_msg)
+        ai_msg = ChatMessage(
+            user_id=user.id, role="assistant", content=SAFE_DEGRADED_REPLY_TEMPLATE,
+            is_crisis_response=False,
+        )
+        db.add(ai_msg)
+        db.commit()
+        return ChatResponse(
+            reply=SAFE_DEGRADED_REPLY_TEMPLATE,
+            is_crisis=False,
             new_memories=[],
         )
 
