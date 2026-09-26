@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>心镜 HeartMirror</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        cream: '#faf8f5',
+        sky: '#e8f0f5',
+        deep: '#5a7a8a',
+        warm: '#d4a574',
+        sage: '#7a9a8a',
+      },
+      fontFamily: {
+        sans: ['-apple-system', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
+      },
+    },
+  },
+}
+</script>
+<style>
+body { background: #faf8f5; }
+.tab-active { border-bottom: 2px solid #5a7a8a; color: #5a7a8a; }
+.chat-bubble-user { background: #5a7a8a; color: white; border-radius: 18px 18px 4px 18px; }
+.chat-bubble-ai { background: white; color: #333; border-radius: 18px 18px 18px 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.memory-card { background: white; border-radius: 12px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+input, textarea, select { outline: none; }
+input:focus, textarea:focus { border-color: #5a7a8a; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- 顶部导航 -->
+<header class="bg-white shadow-sm sticky top-0 z-50">
+  <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+    <h1 class="text-xl font-bold text-deep">心镜</h1>
+    <div id="auth-area" class="text-sm">
+      <button onclick="showLogin()" class="text-deep hover:underline">登录</button>
+    </div>
+  </div>
+  <!-- Tab 栏 -->
+  <nav class="max-w-md mx-auto px-2 flex overflow-x-auto text-sm">
+    <button onclick="switchTab('diary')" data-tab="diary" class="tab-btn tab-active px-4 py-2 whitespace-nowrap">情绪记录</button>
+    <button onclick="switchTab('chat')" data-tab="chat" class="tab-btn px-4 py-2 whitespace-nowrap text-gray-500">AI 对话</button>
+    <button onclick="switchTab('memory')" data-tab="memory" class="tab-btn px-4 py-2 whitespace-nowrap text-gray-500">记忆</button>
+    <button onclick="switchTab('report')" data-tab="report" class="tab-btn px-4 py-2 whitespace-nowrap text-gray-500">报告</button>
+    <button onclick="switchTab('couple')" data-tab="couple" class="tab-btn px-4 py-2 whitespace-nowrap text-gray-500">双人</button>
+    <button onclick="switchTab('assessment')" data-tab="assessment" class="tab-btn px-4 py-2 whitespace-nowrap text-gray-500">测评</button>
+  </nav>
+</header>
+
+<main class="max-w-md mx-auto px-4 py-4">
+
+  <!-- 登录/注册弹窗 -->
+  <div id="login-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-2xl p-6 w-80">
+      <h2 class="text-lg font-bold text-deep mb-4" id="login-title">登录心镜</h2>
+      <input id="login-email" type="email" placeholder="邮箱" class="w-full border rounded-lg px-3 py-2 mb-2">
+      <input id="login-password" type="password" placeholder="密码" class="w-full border rounded-lg px-3 py-2 mb-2">
+      <input id="login-nickname" type="text" placeholder="昵称（注册时填）" class="w-full border rounded-lg px-3 py-2 mb-2 hidden">
+      <input id="login-age" type="number" placeholder="年龄（注册时填）" class="w-full border rounded-lg px-3 py-2 mb-3 hidden">
+      <div class="flex gap-2">
+        <button onclick="doLogin()" class="flex-1 bg-deep text-white rounded-lg py-2">登录</button>
+        <button onclick="showRegister()" class="flex-1 bg-sky text-deep rounded-lg py-2">注册</button>
+      </div>
+      <button onclick="closeLogin()" class="w-full text-gray-400 text-sm mt-3">关闭</button>
+    </div>
+  </div>
+
+  <!-- 1. 情绪记录 Tab -->
+  <section id="tab-diary">
+    <h2 class="text-lg font-semibold text-deep mb-3">今天的情绪</h2>
+    <div class="bg-white rounded-2xl p-4 shadow-sm mb-4">
+      <label class="text-sm text-gray-600">情绪强度：<span id="intensity-val">5</span></label>
+      <input type="range" id="emotion-intensity" min="1" max="10" value="5" class="w-full mt-1" oninput="document.getElementById('intensity-val').textContent=this.value">
+      <div class="mt-3">
+        <label class="text-sm text-gray-600">情绪标签</label>
+        <select id="emotion-label" class="w-full border rounded-lg px-3 py-2 mt-1">
+          <option>开心</option><option>平静</option><option>难过</option>
+          <option>焦虑</option><option>愤怒</option><option>委屈</option>
+          <option>孤独</option><option>害怕</option><option>满足</option>
+        </select>
+      </div>
+      <textarea id="emotion-desc" placeholder="发生了什么？（可选）" class="w-full border rounded-lg px-3 py-2 mt-3 h-20"></textarea>
+      <input id="emotion-tags" placeholder="标签（逗号分隔，如：工作,感情）" class="w-full border rounded-lg px-3 py-2 mt-2">
+      <button onclick="submitDiary()" class="w-full bg-deep text-white rounded-lg py-2 mt-3">记录情绪</button>
+    </div>
+    <h3 class="text-md font-semibold text-deep mb-2">今日记录</h3>
+    <div id="diary-list"></div>
+  </section>
+
+  <!-- 2. AI 对话 Tab -->
+  <section id="tab-chat" class="hidden">
+    <div id="chat-messages" class="space-y-3 mb-4" style="min-height:60vh;"></div>
+    <div class="flex gap-2 sticky bottom-0 bg-cream py-2">
+      <input id="chat-input" placeholder="说说你的感受..." class="flex-1 border rounded-full px-4 py-2" onkeypress="if(event.key==='Enter')sendChat()">
+      <button onclick="sendChat()" class="bg-deep text-white rounded-full px-4 py-2">发送</button>
+    </div>
+  </section>
+
+  <!-- 3. 记忆 Tab -->
+  <section id="tab-memory" class="hidden">
+    <h2 class="text-lg font-semibold text-deep mb-3">心镜记住的</h2>
+    <div class="bg-sky rounded-2xl p-3 mb-4">
+      <p class="text-sm text-deep"><strong>Soul 层：</strong><span id="soul-display">温暖陪伴型</span></p>
+      <select id="soul-select" class="w-full mt-1 border rounded-lg px-2 py-1 text-sm" onchange="changeSoul()">
+        <option value="warm">温暖陪伴型</option>
+        <option value="rational">理性分析型</option>
+        <option value="humor">幽默开导型</option>
+      </select>
+    </div>
+    <div class="bg-white rounded-2xl p-3 mb-4 shadow-sm">
+      <p class="text-sm text-gray-600"><strong>User 层档案</strong></p>
+      <div id="user-profile-display" class="text-sm mt-1 text-gray-700">加载中...</div>
+    </div>
+    <h3 class="text-md font-semibold text-deep mb-2">Memory 层</h3>
+    <div id="memory-list"></div>
+  </section>
+
+  <!-- 4. 报告 Tab -->
+  <section id="tab-report" class="hidden">
+    <h2 class="text-lg font-semibold text-deep mb-3">本周情绪复盘</h2>
+    <div class="bg-white rounded-2xl p-4 shadow-sm mb-4">
+      <canvas id="emotion-pie" height="200"></canvas>
+    </div>
+    <div class="bg-white rounded-2xl p-4 shadow-sm mb-4">
+      <canvas id="intensity-line" height="150"></canvas>
+    </div>
+    <div class="bg-white rounded-2xl p-4 shadow-sm mb-4">
+      <h3 class="text-sm font-semibold text-deep mb-2">关系模式洞察</h3>
+      <p id="report-insights" class="text-sm text-gray-700"></p>
+    </div>
+    <div class="bg-white rounded-2xl p-4 shadow-sm mb-4">
+      <h3 class="text-sm font-semibold text-deep mb-2">下周建议</h3>
+      <ul id="report-suggestions" class="text-sm text-gray-700 list-disc pl-5"></ul>
+    </div>
+    <button onclick="loadShareCard()" class="w-full bg-warm text-white rounded-lg py-2">生成分享卡片</button>
+    <div id="share-card-area" class="mt-3"></div>
+  </section>
+
+  <!-- 5. 双人 Tab -->
+  <section id="tab-couple" class="hidden">
+    <h2 class="text-lg font-semibold text-deep mb-3">双人配对</h2>
+    <div id="couple-status-area" class="bg-white rounded-2xl p-4 shadow-sm mb-4">
+      <p class="text-sm text-gray-600">加载中...</p>
+    </div>
+    <div class="flex gap-2 mb-4">
+      <button onclick="createInvite()" class="flex-1 bg-deep text-white rounded-lg py-2">生成邀请码</button>
+      <button onclick="document.getElementById('join-input').classList.toggle('hidden')" class="flex-1 bg-sky text-deep rounded-lg py-2">输入邀请码</button>
+    </div>
+    <div id="join-input" class="hidden mb-4 flex gap-2">
+      <input id="invite-code-input" placeholder="输入邀请码" class="flex-1 border rounded-lg px-3 py-2">
+      <button onclick="joinCouple()" class="bg-deep text-white rounded-lg px-4 py-2">加入</button>
+    </div>
+    <div id="couple-session-area" class="hidden">
+      <button onclick="startSession()" class="w-full bg-sage text-white rounded-lg py-2 mb-3">开始联合会话</button>
+      <div id="session-messages" class="space-y-2 mb-2"></div>
+      <div class="flex gap-2">
+        <input id="session-input" placeholder="对TA说..." class="flex-1 border rounded-full px-4 py-2">
+        <button onclick="sendSessionMsg()" class="bg-sage text-white rounded-full px-4 py-2">发送</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. 测评 Tab -->
+  <section id="tab-assessment" class="hidden">
+    <h2 class="text-lg font-semibold text-deep mb-3">关系测评</h2>
+    <div class="space-y-3">
+      <div class="bg-white rounded-2xl p-4 shadow-sm">
+        <h3 class="font-semibold text-deep">依恋类型测试</h3>
+        <p class="text-sm text-gray-500 mt-1">10 题 · 了解你的依恋模式</p>
+        <button onclick="startAssessment('attachment')" class="mt-2 bg-deep text-white rounded-lg px-4 py-1.5 text-sm">开始测试</button>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm">
+        <h3 class="font-semibold text-deep">五种爱语测试</h3>
+        <p class="text-sm text-gray-500 mt-1">15 题 · 发现你接收爱的方式</p>
+        <button onclick="startAssessment('love_language')" class="mt-2 bg-deep text-white rounded-lg px-4 py-1.5 text-sm">开始测试</button>
+      </div>
+      <div class="bg-white rounded-2xl p-4 shadow-sm">
+        <h3 class="font-semibold text-deep">冲突风格测试</h3>
+        <p class="text-sm text-gray-500 mt-1">8 题 · 了解你的冲突应对方式</p>
+        <button onclick="startAssessment('conflict')" class="mt-2 bg-deep text-white rounded-lg px-4 py-1.5 text-sm">开始测试</button>
+      </div>
+    </div>
+    <!-- 测评答题区 -->
+    <div id="assessment-quiz" class="hidden mt-4 bg-white rounded-2xl p-4 shadow-sm">
+      <h3 id="quiz-title" class="font-semibold text-deep mb-3"></h3>
+      <div id="quiz-questions" class="space-y-3"></div>
+      <button onclick="submitAssessment()" class="w-full bg-deep text-white rounded-lg py-2 mt-4">提交答案</button>
+    </div>
+    <div id="assessment-result" class="hidden mt-4 bg-sky rounded-2xl p-4"></div>
+  </section>
+
+</main>
+
+<!-- 通知区域 -->
+<div id="notification-area" class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-full px-4 py-2 text-sm hidden z-50"></div>
+
+<script>
+// ---- 全局状态 ----
+let token = localStorage.getItem('hm_token') || '';
+let currentTab = 'diary';
+let quizData = null;
+
+// ---- 工具函数 ----
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+async function api(path, opts = {}) {
+  opts.headers = { ...(opts.headers || {}), 'Content-Type': 'application/json' };
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch('/api' + path, opts);
+  if (res.status === 401) { showLogin(); throw new Error('unauthorized'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || 'error');
+  return data;
+}
+
+function showToast(msg) {
+  const el = document.getElementById('notification-area');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 3000);
+}
+
+// ---- 登录 ----
+function showLogin() { document.getElementById('login-modal').classList.remove('hidden'); }
+function closeLogin() { document.getElementById('login-modal').classList.add('hidden'); }
+function showRegister() {
+  document.getElementById('login-title').textContent = '注册心镜';
+  document.getElementById('login-nickname').classList.remove('hidden');
+  document.getElementById('login-age').classList.remove('hidden');
+}
+async function doLogin() {
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  const isRegister = document.getElementById('login-nickname').classList.contains('hidden') === false;
+  try {
+    let data;
+    if (isRegister) {
+      const nickname = document.getElementById('login-nickname').value;
+      const age = parseInt(document.getElementById('login-age').value) || null;
+      data = await api('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, nickname, age }) });
+    } else {
+      data = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+    }
+    token = data.access_token;
+    localStorage.setItem('hm_token', token);
+    closeLogin();
+    document.getElementById('auth-area').innerHTML = '<button onclick="logout()" class="text-deep">退出</button>';
+    loadAll();
+    showToast('欢迎回来');
+  } catch (e) { showToast(e.message); }
+}
+function logout() { localStorage.removeItem('hm_token'); token=''; location.reload(); }
+
+// ---- Tab 切换 ----
+function switchTab(name) {
+  currentTab = name;
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('tab-active', b.dataset.tab === name);
+    b.classList.toggle('text-gray-500', b.dataset.tab !== name);
+  });
+  ['diary','chat','memory','report','couple','assessment'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('hidden', t !== name);
+  });
+  if (name === 'diary') loadDiaries();
+  if (name === 'chat') loadChatHistory();
+  if (name === 'memory') loadMemories();
+  if (name === 'report') loadReport();
+  if (name === 'couple') loadCoupleStatus();
+}
+
+// ---- 情绪日记 ----
+async function submitDiary() {
+  try {
+    await api('/diary', { method: 'POST', body: JSON.stringify({
+      emotion_label: document.getElementById('emotion-label').value,
+      intensity: parseInt(document.getElementById('emotion-intensity').value),
+      description: document.getElementById('emotion-desc').value,
+      tags: document.getElementById('emotion-tags').value.split(',').map(s=>s.trim()).filter(Boolean),
+    })});
+    showToast('已记录');
+    document.getElementById('emotion-desc').value = '';
+    loadDiaries();
+  } catch(e) { showToast(e.message); }
+}
+async function loadDiaries() {
+  try {
+    const data = await api('/diary?limit=10');
+    document.getElementById('diary-list').innerHTML = data.map(d => `
+      <div class="memory-card">
+        <span class="text-deep font-medium">${esc(d.emotion_label)}</span>
+        <span class="text-sm text-gray-400 ml-2">${d.intensity}/10</span>
+        <span class="text-xs text-gray-400 float-right">${new Date(d.created_at).toLocaleDateString()}</span>
+        ${d.description ? `<p class="text-sm text-gray-600 mt-1">${esc(d.description)}</p>` : ''}
+        ${d.tags?.length ? `<p class="text-xs text-sage mt-1">${d.tags.map(t=>'#'+esc(t)).join(' ')}</p>` : ''}
+      </div>
+    `).join('') || '<p class="text-gray-400 text-sm">暂无记录</p>';
+  } catch(e) {}
+}
+
+// ---- 对话 ----
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  appendChatMsg('user', msg);
+  try {
+    const data = await api('/chat', { method: 'POST', body: JSON.stringify({ message: msg }) });
+    appendChatMsg('assistant', data.reply);
+    if (data.new_memories?.length) {
+      showToast('心镜记住了 ' + data.new_memories.length + ' 件事');
+    }
+  } catch(e) { appendChatMsg('assistant', '出错了: ' + e.message); }
+}
+function appendChatMsg(role, content) {
+  const el = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = role === 'user' ? 'flex justify-end' : 'flex justify-start';
+  div.innerHTML = `<div class="${role==='user'?'chat-bubble-user':'chat-bubble-ai'} px-4 py-2 max-w-[80%]">${esc(content)}</div>`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+async function loadChatHistory() {
+  try {
+    const data = await api('/chat/history?limit=30');
+    document.getElementById('chat-messages').innerHTML = '';
+    data.forEach(m => appendChatMsg(m.role, m.content));
+  } catch(e) {}
+}
+
+// ---- 记忆 ----
+async function loadMemories() {
+  try {
+    const data = await api('/memory');
+    document.getElementById('memory-list').innerHTML = data.map(m => `
+      <div class="memory-card">
+        <div class="flex justify-between items-start">
+          <p class="text-sm flex-1">${esc(m.content)}</p>
+          ${m.is_pinned ? '<span class="text-warm text-xs">📌</span>' : ''}
+        </div>
+        <div class="flex justify-between mt-1 text-xs text-gray-400">
+          <span>${m.emotion || ''} · 重要性${m.importance}</span>
+          <button onclick="deleteMemory(${m.id})" class="text-red-400">删除</button>
+        </div>
+      </div>
+    `).join('') || '<p class="text-gray-400 text-sm">还没有记忆，开始对话后心镜会自动记住重要的事</p>';
+
+    // User 层档案
+    const me = await api('/auth/me');
+    document.getElementById('user-profile-display').innerHTML = `
+      昵称: ${esc(me.nickname)}<br>
+      依恋类型: ${me.attachment_type || '未测评'}<br>
+      爱语: ${me.love_language || '未测评'}<br>
+      冲突风格: ${me.conflict_style || '未测评'}
+    `;
+  } catch(e) {}
+}
+async function deleteMemory(id) {
+  await api('/memory/' + id, { method: 'DELETE' });
+  loadMemories();
+}
+async function changeSoul() {
+  const persona = document.getElementById('soul-select').value;
+  await api('/auth/me', { method: 'PUT', body: JSON.stringify({ soul_persona: persona }) });
+  showToast('已切换人格');
+}
+
+// ---- 报告 ----
+let pieChart = null, lineChart = null;
+async function loadReport() {
+  try {
+    const data = await api('/report/weekly');
+    // 饼图
+    const labels = Object.keys(data.emotion_distribution);
+    const values = Object.values(data.emotion_distribution);
+    if (pieChart) pieChart.destroy();
+    pieChart = new Chart(document.getElementById('emotion-pie'), {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: values, backgroundColor: ['#5a7a8a','#7a9a8a','#d4a574','#c97b7b','#8aa5b5','#b5c9a5','#a5a5c9','#c9b5a5'] }] },
+      options: { responsive: true }
+    });
+    // 折线图
+    if (lineChart) lineChart.destroy();
+    lineChart = new Chart(document.getElementById('intensity-line'), {
+      type: 'line',
+      data: { labels: data.intensity_trend.map(t=>t.date), datasets: [{ label: '情绪强度', data: data.intensity_trend.map(t=>t.avg_intensity), borderColor: '#5a7a8a', fill: false }] },
+      options: { responsive: true }
+    });
+    document.getElementById('report-insights').textContent = data.relationship_insights;
+    document.getElementById('report-suggestions').innerHTML = data.next_week_suggestions.map(s=>`<li>${esc(s)}</li>`).join('');
+  } catch(e) {}
+}
+async function loadShareCard() {
+  try {
+    const data = await api('/report/share-card');
+    document.getElementById('share-card-area').innerHTML = `<div class="bg-white rounded-2xl p-4 shadow-sm text-center">${data.svg_content}</div>`;
+  } catch(e) {}
+}
+
+// ---- 双人 ----
+async function loadCoupleStatus() {
+  try {
+    const data = await api('/couple/status');
+    let html = `<p class="text-sm">状态: ${data.status}</p>`;
+    if (data.partner_nickname) html += `<p class="text-sm text-deep">伴侣: ${esc(data.partner_nickname)}</p>`;
+    document.getElementById('couple-status-area').innerHTML = html;
+    document.getElementById('couple-session-area').classList.toggle('hidden', data.status !== 'connected');
+  } catch(e) { document.getElementById('couple-status-area').innerHTML = '<p class="text-sm text-gray-400">请先登录</p>'; }
+}
+async function createInvite() {
+  try {
+    const data = await api('/couple/invite', { method: 'POST', body: '{}' });
+    showToast('邀请码: ' + data.invite_code);
+    document.getElementById('couple-status-area').innerHTML = `<p class="text-sm">邀请码: <strong class="text-deep text-lg">${data.invite_code}</strong></p><p class="text-xs text-gray-400">24小时内有效</p>`;
+  } catch(e) { showToast(e.message); }
+}
+async function joinCouple() {
+  const code = document.getElementById('invite-code-input').value.trim();
+  try {
+    await api('/couple/join', { method: 'POST', body: JSON.stringify({ invite_code: code }) });
+    showToast('配对成功');
+    loadCoupleStatus();
+  } catch(e) { showToast(e.message); }
+}
+let currentSessionId = null;
+async function startSession() {
+  try {
+    const data = await api('/couple/session', { method: 'POST', body: '{}' });
+    currentSessionId = data.id;
+    showToast('会话已开始');
+  } catch(e) { showToast(e.message); }
+}
+async function sendSessionMsg() {
+  if (!currentSessionId) return showToast('请先开始会话');
+  const content = document.getElementById('session-input').value.trim();
+  if (!content) return;
+  document.getElementById('session-input').value = '';
+  try {
+    const data = await api(`/couple/session/${currentSessionId}/message`, { method: 'POST', body: JSON.stringify({ content }) });
+    const el = document.getElementById('session-messages');
+    el.innerHTML += `<div class="bg-white rounded-lg p-2 text-sm"><p>${esc(data.user_message.content)}</p><p class="text-deep text-xs mt-1">🤖 ${esc(data.moderator_reply)}</p></div>`;
+  } catch(e) { showToast(e.message); }
+}
+
+// ---- 测评 ----
+async function startAssessment(type) {
+  try {
+    const data = await api('/assessment/questions/' + type);
+    quizData = { type, questions: data.questions, answers: [] };
+    document.getElementById('quiz-title').textContent = data.title;
+    document.getElementById('quiz-questions').innerHTML = data.questions.map((q, i) => `
+      <div class="border-b pb-2">
+        <p class="text-sm mb-1">${i+1}. ${esc(q)}</p>
+        <div class="flex gap-2 text-xs">
+          ${[1,2,3,4,5].map(n => `<label class="flex items-center"><input type="radio" name="q${i}" value="${n}" class="mr-1">${['非常不同意','不同意','一般','同意','非常同意'][n-1]}</label>`).join('')}
+        </div>
+      </div>
+    `).join('');
+    document.getElementById('assessment-quiz').classList.remove('hidden');
+    document.getElementById('assessment-result').classList.add('hidden');
+  } catch(e) { showToast(e.message); }
+}
+async function submitAssessment() {
+  if (!quizData) return;
+  const answers = [];
+  for (let i = 0; i < quizData.questions.length; i++) {
+    const sel = document.querySelector(`input[name="q${i}"]:checked`);
+    answers.push(sel ? parseInt(sel.value) : 3);
+  }
+  try {
+    const data = await api(`/assessment/${quizData.type}/submit`, { method: 'POST', body: JSON.stringify({ answers }) });
+    document.getElementById('assessment-result').classList.remove('hidden');
+    document.getElementById('assessment-result').innerHTML = `<h3 class="font-bold text-deep">测评结果</h3><pre class="text-sm mt-2 whitespace-pre-wrap">${JSON.stringify(data.result, null, 2)}</pre>`;
+    showToast('测评完成，已存入档案');
+  } catch(e) { showToast(e.message); }
+}
+
+// ---- 初始化 ----
+async function loadAll() {
+  if (!token) { showLogin(); return; }
+  try {
+    const me = await api('/auth/me');
+    document.getElementById('auth-area').innerHTML = `<span class="text-deep">${esc(me.nickname)}</span> <button onclick="logout()" class="text-gray-400 ml-2">退出</button>`;
+    loadDiaries();
+  } catch(e) { showLogin(); }
+}
+loadAll();
+</script>
+</body>
+</html>
