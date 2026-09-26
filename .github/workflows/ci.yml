@@ -82,6 +82,14 @@ jobs:
           # private 仓跨仓 checkout：使用 SSH Deploy Key（只读）
           ssh-key: ${{ secrets.XINJING_ENGINE_READ_SSH_KEY }}
 
+      - name: Check engine pin freshness (warning only, non-blocking)
+        continue-on-error: true
+        run: |
+          # R3 漂移检测：pin 是否落后于 master？落后期间核心路径是否变更？
+          # 仅 warning（continue-on-error: true），不阻塞主流水线。
+          # 若输出 "core paths changed" → 人工评估后 bump ci.yml 中的 ref。
+          python3 scripts/check_engine_pin_freshness.py --engine-path xinjing-engine
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
