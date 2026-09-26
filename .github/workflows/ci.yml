@@ -6,18 +6,22 @@ on:
   pull_request:
     branches: [main]
 
+# 心镜仓 GITHUB_TOKEN 默认仅对本仓有读权限；若 hanjun88/xinjing-relationship-engine 为 private
+# 且 GITHUB_TOKEN 无权访问，需在仓库 Settings → Secrets 配置一个有该仓 read 权限的
+# Personal Access Token，例如 secrets.XINJING_ENGINE_READ_TOKEN，并把下方 token 改为它。
+
 jobs:
-  test:
+  # ------------------------------------------------------------------ #
+  # Job 1: 降级路径 (SAFE_DEGRADED) — 引擎不可用，验证 fail-closed 行为
+  # ------------------------------------------------------------------ #
+  test-degraded:
+    name: test (SAFE_DEGRADED degraded path)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
     env:
-      # 测试环境变量：P1-C 要求 JWT_SECRET 必须设置且 >=32 字符
       JWT_SECRET: ci-test-jwt-secret-key-at-least-32-chars-long-xxxx
       DATABASE_URL: sqlite:///./heartmirror_ci.db
       WEB_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
-      # 引擎路径在 CI 上不存在，arbitrate 会走 SAFE_DEGRADED 降级路径（符合 fail-closed 设计）
+      # 引擎路径在 CI 上不存在，arbitrate 走 SAFE_DEGRADED 降级路径（fail-closed）
       XINJING_ENGINE_PATH: /nonexistent-engine-path
     steps:
       - uses: actions/checkout@v4
@@ -33,8 +37,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
-      - name: Run pytest
+      - name: Run pytest (degraded path)
         run: |
+          # engine_contract 测试会在引擎不可用时自动 skip；这里仍跑全量 tests/
           python -m pytest tests/ -v --junitxml=pytest-results.xml
 
       - name: Run engine-available path tests (mock engine)
@@ -45,8 +50,67 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pytest-results
+          name: pytest-results-degraded
           path: |
             pytest-results.xml
             pytest-engine-available.xml
+          retention-days: 14
+
+  # ------------------------------------------------------------------ #
+  # Job 2: 真实引擎路径 — checkout xinjing-relationship-engine (pin SHA)
+  #        运行 arbitrate() 真实契约测试，禁止 mock
+  # ------------------------------------------------------------------ #
+  test-real-engine:
+    name: test (real engine contract)
+    runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: ci-test-jwt-secret-key-at-least-32-chars-long-xxxx
+      DATABASE_URL: sqlite:///./heartmirror_ci.db
+      WEB_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    steps:
+      - name: Checkout heartmirror-app
+        uses: actions/checkout@v4
+
+      - name: Checkout xinjing-relationship-engine (pinned SHA)
+        uses: actions/checkout@v4
+        with:
+          repository: hanjun88/xinjing-relationship-engine
+          # 硬编码 pin，禁止 @main / @latest，保证可复现
+          ref: 4c4d8da3e5463bc0016c9e267227e6875854f45d
+          path: xinjing-engine
+          # private 仓 checkout；若 GITHUB_TOKEN 无权访问，替换为 PAT secret
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install heartmirror dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Install engine extra dependencies
+        run: |
+          # 心镜 requirements.txt 已含 pydantic/fastapi；引擎额外需要星历 + 历算库
+          pip install pyswisseph lunar_python
+
+      - name: Point engine client at the checked-out engine
+        run: |
+          echo "XINJING_ENGINE_PATH=${{ github.workspace }}/xinjing-engine" >> $GITHUB_ENV
+          # 确认 engine 包就位
+          ls "${{ github.workspace }}/xinjing-engine/engine/meta_arbiter.py"
+
+      - name: Run engine contract tests (real engine, no mocks)
+        run: |
+          python -m pytest tests/test_engine_contract.py -v --junitxml=pytest-engine-contract.xml
+
+      - name: Upload contract test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results-real-engine
+          path: pytest-engine-contract.xml
           retention-days: 14

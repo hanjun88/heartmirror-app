@@ -105,8 +105,12 @@ def test_chat_engine_available_takes_llm_path(client, monkeypatch):
     assert "12356" not in data["reply"]
 
 
-def test_arbitrate_normal_result_does_not_trigger_safe_degraded():
-    """直接验证：当 _engine_available=True 且引擎函数正常返回时，arbitrate 不返回 SAFE_DEGRADED。"""
+def test_arbitrate_normal_result_does_not_trigger_safe_degraded(monkeypatch):
+    """直接验证：当 _engine_available=True 且引擎函数正常返回时，arbitrate 不返回 SAFE_DEGRADED。
+
+    使用 monkeypatch.setattr，测试结束后自动恢复 engine_client 模块状态，
+    避免污染同进程内后续的真实引擎契约测试（R2）。
+    """
     from backend import engine_client
 
     class _FakeVerdict:
@@ -125,25 +129,13 @@ def test_arbitrate_normal_result_does_not_trigger_safe_degraded():
         def route(self, ctx):
             return _FakeChain()
 
-    monkeypatch_targets = {
-        "_engine_available": True,
-        "_crisis_scan_fn": lambda text: _FakeVerdict(),
-        "_MetaArbiter": _FakeArbiter,
-        "_RiskAssessment": lambda: type("RA", (), {})(),
-        "_CaseContext": lambda **kw: type("CC", (), kw)(),
-    }
+    monkeypatch.setattr(engine_client, "_engine_available", True)
+    monkeypatch.setattr(engine_client, "_crisis_scan_fn", lambda text: _FakeVerdict())
+    monkeypatch.setattr(engine_client, "_MetaArbiter", _FakeArbiter)
+    monkeypatch.setattr(engine_client, "_RiskAssessment", lambda: type("RA", (), {})())
+    monkeypatch.setattr(engine_client, "_CaseContext", lambda **kw: type("CC", (), kw)())
 
-    for attr, val in monkeypatch_targets.items():
-        setattr(engine_client, attr, val)
-
-    try:
-        result = engine_client.arbitrate("今天想聊聊关系修复")
-        assert result["is_crisis"] is False
-        assert result["target_level"] == "REPAIR"
-        assert result["target_level"] != "SAFE_DEGRADED"
-    finally:
-        # Restore
-        for attr in monkeypatch_targets:
-            # Can't easily restore without original; engine_client module-level state
-            # is per-process and CI runs this in isolation.
-            pass
+    result = engine_client.arbitrate("今天想聊聊关系修复")
+    assert result["is_crisis"] is False
+    assert result["target_level"] == "REPAIR"
+    assert result["target_level"] != "SAFE_DEGRADED"
