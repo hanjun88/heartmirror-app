@@ -79,7 +79,7 @@ jobs:
           repository: hanjun88/xinjing-relationship-engine
           # 硬编码 pin，禁止 @main / @latest，保证可复现
           # 与 test-real-divination-link job 保持一致（R3 漂移治理）
-          ref: 515469e80c448676f0b785b95e4b295cf42b65da
+          ref: b4910e70823943588e562533b0542d24ec5a393d
           path: xinjing-engine
           # private 仓跨仓 checkout：使用 SSH Deploy Key（只读）
           ssh-key: ${{ secrets.XINJING_ENGINE_READ_SSH_KEY }}
@@ -148,7 +148,7 @@ jobs:
           repository: hanjun88/xinjing-relationship-engine
           # pin 到含 divination_consumer + manifest_validator + 八字时区修复的 master
           # 与 test-real-engine-contract job 保持一致（R3 漂移治理）
-          ref: 515469e80c448676f0b785b95e4b295cf42b65da
+          ref: b4910e70823943588e562533b0542d24ec5a393d
           path: xinjing-engine
           # private 仓跨仓 checkout：使用 SSH Deploy Key（只读）
           ssh-key: ${{ secrets.XINJING_ENGINE_READ_SSH_KEY }}
@@ -158,7 +158,7 @@ jobs:
         with:
           repository: hanjun88/divination-knowledge-engine
           # public 仓，不需要 ssh-key；pin 到当前 master
-          ref: 22880a40dda9241daedfe61dbde2139bca9e69a0
+          ref: 097f6ca1857c7ac81dec2e8b5b80db59e8e2cee6
           path: divination-provider
 
       - name: Set up Python
