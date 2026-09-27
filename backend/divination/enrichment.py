@@ -216,7 +216,15 @@ class DivinationEnrichment:
 
     # ------------------------------------------------------------------ P5a 双源路径
     def _enrich_dual_source(self, text: str, user: Any) -> DivinationResult:
-        """双源：引擎历法（bazi + natal）+ Provider 规则推演。永不抛异常。"""
+        """双源：引擎历法（bazi + natal）+ Provider 规则推演。永不抛异常。
+
+        时区语义：
+          * bazi 的 ``dt_local`` 本就期望本地时间，直接传 ``birth_dt``。
+          * natal 的 ``dt_utc`` 期望 UTC。仅当 ``birth_datetime`` 带时区偏移
+            （``Z`` 或 ``±HH:MM``）时才换算为 UTC；naive 时间（无时区）无法
+            确定 UTC，原样传入作为象征层近似——不做臆测的时区换算
+            （宫位/上升点偏差属象征层可接受误差，confidence 锁 0.38）。
+        """
         birth_dt = getattr(user, "birth_datetime", None) or None
         if not birth_dt:
             return DivinationResult(
@@ -249,7 +257,9 @@ class DivinationEnrichment:
         # ---- 源 A2：引擎西方星盘（象征旁注，直接侧注，不经过 Provider）----
         if self._engine_natal_fn is not None and lat is not None and lon is not None:
             try:
-                natal_data = self._engine_natal_fn(birth_dt, float(lat), float(lon))
+                # natal 期望 UTC；带时区偏移才换算，naive 时间原样传入（见 docstring）。
+                natal_dt = self._to_utc_iso(birth_dt)
+                natal_data = self._engine_natal_fn(natal_dt, float(lat), float(lon))
                 natal_sym = self._natal_to_annotation(natal_data)
                 if natal_sym is not None:
                     symbols.append(natal_sym)
@@ -322,6 +332,27 @@ class DivinationEnrichment:
             "ri_zhu_wx": str(bazi_data.get("day_master_wx", "") or ""),
             "ri_zhu_wangshuai": str(bazi_data.get("strength", "平") or "平"),
         }
+
+    @staticmethod
+    def _to_utc_iso(dt_str: str) -> str:
+        """把出生时间字符串转为 UTC ISO（仅当自带时区偏移时）。
+
+        - 带时区偏移（末尾 ``Z`` 或 ``±HH:MM``）：用 ``datetime.fromisoformat``
+          解析后 ``astimezone(UTC)``，返回无时区后缀的 UTC 字符串供 natal 使用。
+        - naive 时间（无时区）：无法确定 UTC，原样返回——作为象征层近似，
+          不做臆测的时区换算（宫位/上升点偏差在象征层可接受）。
+        - 解析失败也原样返回，绝不抛异常。
+        """
+        s = str(dt_str).strip()
+        try:
+            from datetime import datetime, timezone
+            normalized = s[:-1] + "+00:00" if s.endswith("Z") else s
+            dt = datetime.fromisoformat(normalized)
+            if dt.tzinfo is not None:
+                return dt.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
+        except (ValueError, AttributeError):
+            pass
+        return s
 
     @staticmethod
     def _natal_to_annotation(natal_data: Any) -> SymbolicAnnotation | None:
