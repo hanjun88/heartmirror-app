@@ -121,7 +121,7 @@ def test_provider_unavailable_is_non_blocking():
     """ADR-DIV-001：Provider 不可用 -> 降级无侧注，不抛异常。"""
     events = []
 
-    def boom(_domain, _text):
+    def boom(_domain):
         raise ConnectionError("provider unreachable")
 
     res = DivinationEnrichment(boom, security_sink=lambda e, d: events.append(e)).enrich("焦虑")
@@ -138,7 +138,7 @@ def test_contract_mismatch_is_non_blocking_to_safety():
     class ManifestValidationError(Exception):
         pass
 
-    def boom(_domain, _text):
+    def boom(_domain):
         raise ManifestValidationError("content_sha256 不匹配")
 
     res = DivinationEnrichment(boom, security_sink=lambda e, d: events.append(e)).enrich("x")
@@ -149,7 +149,7 @@ def test_contract_mismatch_is_non_blocking_to_safety():
 def test_malformed_result_is_non_blocking():
     events = []
     res = DivinationEnrichment(
-        lambda _d, _t: "not-a-mapping",  # type: ignore[return-value]
+        lambda _d: "not-a-mapping",  # type: ignore[return-value]
         security_sink=lambda e, d: events.append(e),
     ).enrich("x")
     assert res.degraded is True
@@ -167,7 +167,7 @@ def test_security_sink_failure_does_not_escape():
     def bad_sink(_e, _d):
         raise RuntimeError("sink down")
 
-    def boom(_d, _t):
+    def boom(_d):
         raise ConnectionError("down")
 
     res = DivinationEnrichment(boom, security_sink=bad_sink).enrich("x")
@@ -177,7 +177,7 @@ def test_security_sink_failure_does_not_escape():
 # ====================================================================== D. 对抗场景
 def test_provider_cannot_smuggle_safety_score_through_symbolic_layer():
     """Provider 即使在象征层夹带 score/level/risk，也必须被丢弃。"""
-    res = DivinationEnrichment(lambda _d, _t: {
+    res = DivinationEnrichment(lambda _d: {
         "symbols": [
             {"domain": "bazi", "engine": "e", "content": "官鬼爻旺", "confidence": 0.38},
             {"domain": "bazi", "engine": "e", "content": "高分", "score": 0.99},
@@ -190,7 +190,7 @@ def test_provider_cannot_smuggle_safety_score_through_symbolic_layer():
 
 def test_annotation_declares_it_is_not_a_safety_verdict():
     """侧注必须自我声明非判定依据，避免被下游当作证据使用。"""
-    res = DivinationEnrichment(lambda _d, _t: {
+    res = DivinationEnrichment(lambda _d: {
         "symbols": [{"domain": "bazi", "engine": "e", "content": "官鬼爻旺相", "confidence": 0.38}]
     }).enrich("焦虑")
     assert res.is_usable
@@ -214,12 +214,12 @@ def test_symbolic_lock_violation_does_not_stop_safety():
 
 
 def test_degraded_result_renders_empty():
-    res = DivinationEnrichment(lambda _d, _t: (_ for _ in ()).throw(ConnectionError())).enrich("x")
+    res = DivinationEnrichment(lambda _d: (_ for _ in ()).throw(ConnectionError())).enrich("x")
     assert DivinationEnrichment.render_annotation(res) == ""
 
 
 def test_successful_enrichment_produces_clamped_annotation():
-    res = DivinationEnrichment(lambda _d, _t: {
+    res = DivinationEnrichment(lambda _d: {
         "symbols": [{"domain": "liuyao", "engine": "liuyao-v1", "content": "六爻见官鬼",
                      "confidence": 0.88, "provenance": "22880a4"}],
         "provenance": "22880a4",

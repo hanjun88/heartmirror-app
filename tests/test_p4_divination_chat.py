@@ -10,7 +10,7 @@
 """
 import os
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, ANY
 
 import pytest
 from fastapi.testclient import TestClient
@@ -187,8 +187,8 @@ def test_enrichment_added_to_prompt(client, monkeypatch):
     assert r.status_code == 200
     assert r.json()["reply"] == "LLM 正常回复"
 
-    # enrich 必须被调用一次
-    mock_enrichment.enrich.assert_called_once_with("今天和伴侣吵了一架，心里很乱")
+    # enrich 必须被调用一次（P5a 起传入 user=当前登录用户）
+    mock_enrichment.enrich.assert_called_once_with("今天和伴侣吵了一架，心里很乱", user=ANY)
 
     # system message 必须包含侧注标记和象征内容
     assert len(captured_messages) == 1

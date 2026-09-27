@@ -222,10 +222,25 @@ def bazi(dt_local: str, sex: str = "男") -> Dict[str, Any]:
                 "is_symbolic_annotation": True, "confidence": 0.39}
     try:
         chart = _compute_bazi_fn(dt_local, sex=sex)
+        # P5a：返回四柱干支（year/month/day/hour 的 gan+zhi），供心镜映射到
+        # Provider BaziInput 契约。公历→干支换算完全由引擎仓 bazi_engine(lunar-python)
+        # 完成，心镜不自行排盘。
+        def _pillar(p) -> Dict[str, str]:
+            return {
+                "gan": str(getattr(p, "gan", "") or ""),
+                "zhi": str(getattr(p, "zhi", "") or ""),
+            }
         return {
             "available": True,
             "day_master": getattr(chart, "day_master", ""),
+            "day_master_wx": getattr(chart, "day_master_wx", ""),
             "strength": getattr(chart, "strength", ""),
+            "pillars": {
+                "year": _pillar(getattr(chart, "year", None)),
+                "month": _pillar(getattr(chart, "month", None)),
+                "day": _pillar(getattr(chart, "day", None)),
+                "hour": _pillar(getattr(chart, "hour", None)),
+            },
             "is_symbolic_annotation": True,
             "confidence": 0.39,
             "disclaimer": "八字为象征层旁注，置信度 [0.36, 0.40]，不构成科学结论。",

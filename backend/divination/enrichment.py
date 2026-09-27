@@ -167,6 +167,7 @@ class DivinationEnrichment:
             )
 
         try:
+            # 旧单源路径：provider_fn(domain)（P4/ADR-DIV 既有测试约定）。
             raw = self._provider_fn(self._domain)
         except Exception as exc:
             event, code = self._classify(exc)

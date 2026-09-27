@@ -9,6 +9,7 @@ from ..models import ChatMessage, User
 from ..schemas import ChatRequest, ChatResponse, ChatHistoryOut, MemoryOut
 from ..divination import SafetyInput, check_safe_boundary, DivinationEnrichment
 from ..divination.provider_factory import build_provider_fn
+from .. import engine_client
 from ..engine_client import arbitrate
 from ..llm_client import chat_completion, SOUL_PERSONAS
 from ..services.memory_service import recall_memories, extract_and_store, build_memory_context
@@ -17,10 +18,17 @@ from .auth import get_current_user
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-# P4/P5：占星侧注单例。P5 把 provider_fn 接到真实 divination_consumer 客户端
-# （build_provider_fn() 在引擎仓不可用/import 失败时返回 None，enrich() 自动 degraded，
-#  与 P4 行为一致——安全默认值）。便于测试 monkeypatch 替换为 MagicMock。
-_divination_enrichment = DivinationEnrichment(provider_fn=build_provider_fn())
+# P4/P5a：占星侧注单例。
+# - provider_fn 接到真实 divination_consumer（build_provider_fn() 在引擎仓不可用/
+#   import 失败时返回 None，enrich() 自动 degraded，与 P4 行为一致——安全默认值）。
+# - engine_bazi_fn / engine_natal_fn 接到引擎仓历法；引擎不可用时这两个函数自身
+#   返回 {"available": False}（不抛异常），enrich() 据此走降级。
+# 便于测试 monkeypatch 替换为 MagicMock。
+_divination_enrichment = DivinationEnrichment(
+    provider_fn=build_provider_fn(),
+    engine_bazi_fn=engine_client.bazi,
+    engine_natal_fn=engine_client.natal,
+)
 
 CRISIS_REPLY_TEMPLATE = (
     "我听到你说的话了，你的安全最重要。\n\n"
@@ -121,13 +129,14 @@ def chat(body: ChatRequest, db: Session = Depends(get_db),
     recalled = recall_memories(db, user.id, body.message, top_k=5)
     memory_context = build_memory_context(recalled)
 
-    # P4：占星侧注（仅非危机、非 SAFETY_PLAN 时启用；绝不影响安全决策）
+    # P4/P5a：占星侧注（仅非危机、非 SAFETY_PLAN 时启用；绝不影响安全决策）
     # 硬约束：enrichment 只在危机分支 + SAFE_DEGRADED 分支都已提前 return 之后才执行；
     # SAFETY_PLAN 显式跳过；任何异常只 log warning，绝不阻断主流程。
+    # P5a：把当前登录 user（含 birth_datetime/经纬度）传入，启用引擎历法 + Provider 双源。
     divination_annotation = ""
     if target_level not in ("CRISIS", "SAFETY_PLAN"):
         try:
-            div_result = _divination_enrichment.enrich(body.message)
+            div_result = _divination_enrichment.enrich(body.message, user=user)
             if div_result.is_usable:
                 divination_annotation = DivinationEnrichment.render_annotation(div_result)
         except Exception as e:

@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
-"""P5：把 DivinationEnrichment.provider_fn 接到真实 divination_consumer 客户端。
+"""P5a：把 DivinationEnrichment.provider_fn 接到真实 divination_consumer 客户端。
 
 设计目标
 ========
-``build_provider_fn()`` 返回一个符合 ``(domain, text) -> Mapping`` 签名的 provider_fn，
-其内部通过 ``sys.path`` 按需导入引擎仓的 ``divination_consumer.client.DivinationClient``，
-调用 ``client.analyze(domain, {"text": text})`` 访问 Provider（divination-knowledge-engine）。
+``build_provider_fn()`` 返回一个符合 ``(domain, payload) -> Mapping`` 签名的
+provider_fn，其内部通过 ``sys.path`` 按需导入引擎仓的
+``divination_consumer.client.DivinationClient``，调用
+``client.analyze(domain, payload)`` 访问 Provider（divination-knowledge-engine）。
+
+P5a 双源链路中，``payload`` 由 ``DivinationEnrichment`` 从引擎仓 bazi_engine
+排出的四柱干支映射为 Provider ``BaziInput`` 契约（year_gan/year_zhi/...），
+而非自由对话文本。
 
 安全降级（fail-open for enrichment）
 ====================================
@@ -40,14 +45,14 @@ logger = logging.getLogger("heartmirror.divination.provider_factory")
 ENV_ENGINE_PATH = "XINJING_ENGINE_PATH"
 
 
-def build_provider_fn() -> Callable[[str, str], Mapping[str, Any]] | None:
+def build_provider_fn() -> Callable[[str, Mapping[str, Any]], Mapping[str, Any]] | None:
     """构造一个调用真实 divination_consumer 的 provider_fn；失败返回 None。
 
-    返回的 callable 签名为 ``(domain: str, text: str) -> Mapping[str, Any]``：
+    返回的 callable 签名为 ``(domain: str, payload: Mapping) -> Mapping``：
       * 首次调用时懒加载构造 ``DivinationClient``（默认 base_url 来自环境变量
         ``DIVINATION_PROVIDER_URL``，默认 http://localhost:8000；manifest/schema
         使用引擎仓 vendor 内的默认契约快照）；
-      * 调用 ``client.analyze(domain, {"text": text})`` 并返回原始响应 dict；
+      * 调用 ``client.analyze(domain, payload)`` 并返回原始响应 dict；
       * 任何异常直接抛出，由 ``DivinationEnrichment.enrich()`` 捕获并 degraded。
 
     Returns:
@@ -87,14 +92,11 @@ def build_provider_fn() -> Callable[[str, str], Mapping[str, Any]] | None:
     # 闭包内懒加载并缓存客户端：模块 import 时不构造、不联网。
     client_holder: dict[str, Any] = {}
 
-    def provider_fn(domain: str, text: str) -> Mapping[str, Any]:
+    def provider_fn(domain: str, payload: Mapping[str, Any]) -> Mapping[str, Any]:
         if "client" not in client_holder:
             # DivinationClient() 构造仅读取本地 vendor manifest/schema，不发网络包。
             client_holder["client"] = DivinationClient()
-        # payload 字段名：以 Provider 实际 analyze 端点为准。当前 Provider 的
-        # /api/{domain}/analyze 期望结构化占卜事实（六爻需 month_zh/day_zh/yong_shen），
-        # 自由文本会被 FastAPI 判 422 -> DivinationAPIError -> enrich() degraded。
-        # P5 仅打通 transport，不做 chat-text -> 占卜事实的抽取；这是预期的安全降级。
-        return client_holder["client"].analyze(domain, {"text": text})
+        # payload 已是心镜从引擎 bazi_engine 映射出的结构化占卜事实（BaziInput）。
+        return client_holder["client"].analyze(domain, dict(payload))
 
     return provider_fn
