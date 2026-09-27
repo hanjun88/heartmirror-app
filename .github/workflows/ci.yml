@@ -41,7 +41,8 @@ jobs:
       - name: Run pytest (degraded path)
         run: |
           # engine_contract 测试会在引擎不可用时自动 skip；这里仍跑全量 tests/
-          python -m pytest tests/ -v --junitxml=pytest-results.xml
+          # -m "not e2e"：P5a 三仓真实链路 E2E 只在专用 job 运行（需真实引擎 + Provider 子进程）。
+          python -m pytest tests/ -v -m "not e2e" --junitxml=pytest-results.xml
 
       - name: Run engine-available path tests (mock engine)
         run: |
@@ -183,15 +184,16 @@ jobs:
           ls "${{ github.workspace }}/xinjing-engine/xinjing-relationship-engine/divination_consumer/client.py"
           ls "${{ github.workspace }}/divination-provider/engine/main.py"
 
-      - name: Run real divination provider link tests (no skip)
+      - name: Run P5a three-repo E2E tests (no skip)
         run: |
-          # Provider 子进程启动失败会直接 raise（fixture 不 skip），强制 CI fail。
-          python -m pytest tests/test_p5_real_divination_link.py -v --junitxml=pytest-p5-real-link.xml
+          # E2E fixture 自启 Provider uvicorn 子进程；启动失败直接 raise（不 skip），强制 CI fail。
+          # 真实三仓链路：心镜 -> 引擎仓 lunar bazi / western natal -> divination_consumer -> Provider HTTP。
+          python -m pytest tests/test_p5a_e2e.py -v -m e2e --junitxml=pytest-p5a-e2e.xml
 
-      - name: Upload real link test results
+      - name: Upload E2E test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pytest-results-real-divination-link
-          path: pytest-p5-real-link.xml
+          name: pytest-results-p5a-e2e
+          path: pytest-p5a-e2e.xml
           retention-days: 14
