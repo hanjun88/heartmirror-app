@@ -78,7 +78,8 @@ jobs:
         with:
           repository: hanjun88/xinjing-relationship-engine
           # 硬编码 pin，禁止 @main / @latest，保证可复现
-          ref: 4c4d8da3e5463bc0016c9e267227e6875854f45d
+          # 与 test-real-divination-link job 保持一致（R3 漂移治理）
+          ref: 515469e80c448676f0b785b95e4b295cf42b65da
           path: xinjing-engine
           # private 仓跨仓 checkout：使用 SSH Deploy Key（只读）
           ssh-key: ${{ secrets.XINJING_ENGINE_READ_SSH_KEY }}
@@ -145,8 +146,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: hanjun88/xinjing-relationship-engine
-          # pin 到含 divination_consumer + manifest_validator 的 master
-          ref: 7ae10669aa3117e05d0f515056e4c9196c9ab47e
+          # pin 到含 divination_consumer + manifest_validator + 八字时区修复的 master
+          # 与 test-real-engine-contract job 保持一致（R3 漂移治理）
+          ref: 515469e80c448676f0b785b95e4b295cf42b65da
           path: xinjing-engine
           # private 仓跨仓 checkout：使用 SSH Deploy Key（只读）
           ssh-key: ${{ secrets.XINJING_ENGINE_READ_SSH_KEY }}
