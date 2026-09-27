@@ -123,3 +123,75 @@ jobs:
           name: pytest-results-real-engine
           path: pytest-engine-contract.xml
           retention-days: 14
+
+  # ------------------------------------------------------------------ #
+  # Job 3: 真实占星链路 — checkout engine + Provider(public)，启动 Provider
+  #        uvicorn 子进程，验证 DivinationEnrichment -> divination_consumer -> Provider
+  #        端到端不阻断对话。禁止 mock transport；Provider 启动失败直接 fail（不 skip）。
+  # ------------------------------------------------------------------ #
+  test-real-divination-link:
+    name: test (real divination provider link)
+    runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: ci-test-jwt-secret-key-at-least-32-chars-long-xxxx
+      DATABASE_URL: sqlite:///./heartmirror_ci.db
+      WEB_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    steps:
+      - name: Checkout heartmirror-app
+        uses: actions/checkout@v4
+
+      - name: Checkout xinjing-relationship-engine (pinned SHA)
+        uses: actions/checkout@v4
+        with:
+          repository: hanjun88/xinjing-relationship-engine
+          # pin 到含 divination_consumer + manifest_validator 的 master
+          ref: 7ae10669aa3117e05d0f515056e4c9196c9ab47e
+          path: xinjing-engine
+          # private 仓跨仓 checkout：使用 SSH Deploy Key（只读）
+          ssh-key: ${{ secrets.XINJING_ENGINE_READ_SSH_KEY }}
+
+      - name: Checkout divination-knowledge-engine (public, pinned SHA)
+        uses: actions/checkout@v4
+        with:
+          repository: hanjun88/divination-knowledge-engine
+          # public 仓，不需要 ssh-key；pin 到当前 master
+          ref: 22880a40dda9241daedfe61dbde2139bca9e69a0
+          path: divination-provider
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install heartmirror dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Install engine + provider extra dependencies
+        run: |
+          # 引擎 arbitrate 真实路径需要星历/历算库；Provider requirements 已被
+          # heartmirror requirements 覆盖（fastapi/uvicorn/pydantic/httpx），这里补星历库。
+          pip install pyswisseph lunar_python
+
+      - name: Point divination consumer at checked-out engine + provider
+        run: |
+          echo "XINJING_ENGINE_PATH=${{ github.workspace }}/xinjing-engine/xinjing-relationship-engine" >> $GITHUB_ENV
+          echo "DIVINATION_PROVIDER_URL=http://127.0.0.1:8765" >> $GITHUB_ENV
+          echo "DIVINATION_PROVIDER_ENGINE_DIR=${{ github.workspace }}/divination-provider/engine" >> $GITHUB_ENV
+          ls "${{ github.workspace }}/xinjing-engine/xinjing-relationship-engine/divination_consumer/client.py"
+          ls "${{ github.workspace }}/divination-provider/engine/main.py"
+
+      - name: Run real divination provider link tests (no skip)
+        run: |
+          # Provider 子进程启动失败会直接 raise（fixture 不 skip），强制 CI fail。
+          python -m pytest tests/test_p5_real_divination_link.py -v --junitxml=pytest-p5-real-link.xml
+
+      - name: Upload real link test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results-real-divination-link
+          path: pytest-p5-real-link.xml
+          retention-days: 14

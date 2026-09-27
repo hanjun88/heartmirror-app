@@ -1,0 +1,2 @@
+{"file": "tests/test_p4_divination_chat.py", "reason": "P4 safety invariants must still pass after signature change"}
+{"file": ".github/workflows/ci.yml", "reason": "New test-real-divination-link job added; existing jobs unchanged"}

@@ -1,0 +1,3 @@
+{"file": "backend/divination/enrichment.py", "reason": "Existing enrichment: provider_fn currently called as self._provider_fn(self._domain); signature must extend to (domain, text)"}
+{"file": "backend/routers/chat.py", "reason": "P4 wiring at L21 + L122-153; safety boundaries must remain untouched"}
+{"file": "tests/test_p4_divination_chat.py", "reason": "P4 test patterns to preserve; MagicMock-based"}

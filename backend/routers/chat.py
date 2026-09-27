@@ -8,6 +8,7 @@ from ..database import get_db
 from ..models import ChatMessage, User
 from ..schemas import ChatRequest, ChatResponse, ChatHistoryOut, MemoryOut
 from ..divination import SafetyInput, check_safe_boundary, DivinationEnrichment
+from ..divination.provider_factory import build_provider_fn
 from ..engine_client import arbitrate
 from ..llm_client import chat_completion, SOUL_PERSONAS
 from ..services.memory_service import recall_memories, extract_and_store, build_memory_context
@@ -16,9 +17,10 @@ from .auth import get_current_user
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-# P4：占星侧注单例。provider_fn=None 时 enrich() 永远返回 degraded（安全默认值），
-# 便于测试 monkeypatch 替换为 MagicMock 或注入可控 provider。
-_divination_enrichment = DivinationEnrichment(provider_fn=None)
+# P4/P5：占星侧注单例。P5 把 provider_fn 接到真实 divination_consumer 客户端
+# （build_provider_fn() 在引擎仓不可用/import 失败时返回 None，enrich() 自动 degraded，
+#  与 P4 行为一致——安全默认值）。便于测试 monkeypatch 替换为 MagicMock。
+_divination_enrichment = DivinationEnrichment(provider_fn=build_provider_fn())
 
 CRISIS_REPLY_TEMPLATE = (
     "我听到你说的话了，你的安全最重要。\n\n"
