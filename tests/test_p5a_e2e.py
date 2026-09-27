@@ -185,6 +185,32 @@ def test_p5a_real_three_repo_chain(provider_server):
     assert body["domain"] == "bazi"
     assert "conclusions" in body and "matched_rules" in body
 
+    # 8b. 契约实质性断言（防"绿灯放过断裂"）：
+    #     仅断言 HTTP 200 / 字段存在，会让"Provider 扩了 847 条而 Consumer
+    #     vendor 仍停在 206 条"这类断裂被 200 掩盖。必须校验：
+    #       (a) list_rules 经 Consumer 门禁（count + content_sha256 双重 fail-closed）
+    #       (b) 返回条数与 Provider 真实下发条数一致
+    from divination_consumer import DivinationClient  # noqa: E402
+
+    with DivinationClient(base_url=provider_server) as consumer:
+        for domain in ("bazi", "liuyao", "ziwei", "vedic", "western"):
+            rules = consumer.list_rules(domain)   # 门禁不通过会 raise
+            assert rules["count"] == len(rules["rules"]), (
+                f"{domain}: count={rules['count']} != len(rules)={len(rules['rules'])}"
+            )
+            assert isinstance(rules.get("content_sha256"), str) and rules["content_sha256"], (
+                f"{domain}: 缺少 content_sha256 内容指纹"
+            )
+        # 与 Provider 裸 HTTP 对齐，排除 Consumer 自身缓存导致的假一致
+        raw = httpx.get(f"{provider_server}/api/rules/bazi", timeout=10.0).json()
+        gated = DivinationClient(base_url=provider_server).list_rules("bazi")
+        assert gated["count"] == raw["count"], (
+            f"Consumer 门禁放行的条数 {gated['count']} 与 Provider 实际 {raw['count']} 不一致"
+        )
+        assert gated["content_sha256"] == raw["content_sha256"], (
+            "Consumer 校验的内容指纹与 Provider 实际下发不一致"
+        )
+
     # 9. enrich 整体不抛、且至少有 western 旁注交付（部分降级也算连通）。
     assert result.is_usable or result.symbols, (
         f"双源链路应交付至少一条侧注，实际 degraded={result.degraded} reason={result.reason!r}"
